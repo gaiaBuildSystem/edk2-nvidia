@@ -416,8 +416,6 @@ SetCpuGpuDistanceInfoPcdsFromDtb (
   UINT32        CpuToRemoteHbmDistance;
   UINT32        HbmToLocalCpuDistance;
   UINT32        HbmToRemoteCpuDistance;
-  UINT32        HbmToLocalGpuDistance;
-  UINT32        HbmToRemoteGpuDistance;
   UINT32        GpuToLocalHbmDistance;
   UINT32        GpuToRemoteHbmDistance;
   INTN          AcpiNode;
@@ -513,24 +511,6 @@ SetCpuGpuDistanceInfoPcdsFromDtb (
       DEBUG ((DEBUG_INFO, "Gpu To Other Hbm Distance = 0x%X\n", PcdGet32 (PcdGpuToRemoteHbmDistance)));
     } else {
       DEBUG ((DEBUG_INFO, "Gpu To Other Hbm Distance not found, using 0x%X\n", PcdGet32 (PcdGpuToRemoteHbmDistance)));
-    }
-
-    Property = FdtGetProp (Dtb, AcpiNode, "hbm-distance-localgpu", NULL);
-    if (Property != NULL) {
-      HbmToLocalGpuDistance = SwapBytes32 (Property[0]);
-      PcdSet32S (PcdHbmToLocalGpuDistance, HbmToLocalGpuDistance);
-      DEBUG ((DEBUG_INFO, "Local Hbm To Gpu Distance = 0x%X\n", PcdGet32 (PcdHbmToLocalGpuDistance)));
-    } else {
-      DEBUG ((DEBUG_INFO, "Local Hbm To Gpu Distance not found, using 0x%X\n", PcdGet32 (PcdHbmToLocalGpuDistance)));
-    }
-
-    Property = FdtGetProp (Dtb, AcpiNode, "hbm-distance-remotegpu", NULL);
-    if (Property != NULL) {
-      HbmToRemoteGpuDistance = SwapBytes32 (Property[0]);
-      PcdSet32S (PcdHbmToRemoteGpuDistance, HbmToRemoteGpuDistance);
-      DEBUG ((DEBUG_INFO, "Remote Hbm To Gpu Distance = 0x%X\n", PcdGet32 (PcdHbmToRemoteGpuDistance)));
-    } else {
-      DEBUG ((DEBUG_INFO, "Remote Hbm To Gpu Distance not found, using 0x%X\n", PcdGet32 (PcdHbmToRemoteGpuDistance)));
     }
   }
 }

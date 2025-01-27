@@ -1,7 +1,7 @@
 ## @file
 #  SlitParser
 #
-#  SPDX-FileCopyrightText: Copyright (c) 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+#  SPDX-FileCopyrightText: Copyright (c) 2024-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 #
 #  SPDX-License-Identifier: BSD-2-Clause-Patent
 ##
@@ -36,19 +36,6 @@
   gEfiMdeModulePkgTokenSpaceGuid.PcdAcpiDefaultOemRevision
   gEfiMdeModulePkgTokenSpaceGuid.PcdAcpiDefaultOemId
   gEfiMdeModulePkgTokenSpaceGuid.PcdAcpiDefaultCreatorId
-  gNVIDIATokenSpaceGuid.PcdTegraMaxSockets
-  gNVIDIATokenSpaceGuid.PcdLocalDistance
-  gNVIDIATokenSpaceGuid.PcdUnreachableDistance
-  gNVIDIATokenSpaceGuid.PcdCpuToRemoteCpuDistance
-  gNVIDIATokenSpaceGuid.PcdGpuToRemoteGpuDistance
-  gNVIDIATokenSpaceGuid.PcdCpuToLocalHbmDistance
-  gNVIDIATokenSpaceGuid.PcdCpuToRemoteHbmDistance
-  gNVIDIATokenSpaceGuid.PcdHbmToLocalCpuDistance
-  gNVIDIATokenSpaceGuid.PcdHbmToRemoteCpuDistance
-  gNVIDIATokenSpaceGuid.PcdGpuToLocalHbmDistance
-  gNVIDIATokenSpaceGuid.PcdGpuToRemoteHbmDistance
-  gNVIDIATokenSpaceGuid.PcdHbmToLocalGpuDistance
-  gNVIDIATokenSpaceGuid.PcdHbmToRemoteGpuDistance
 
 [Guids]
 

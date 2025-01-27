@@ -67,14 +67,10 @@
   gNVIDIATokenSpaceGuid.PcdGpuToRemoteGpuDistance
   gNVIDIATokenSpaceGuid.PcdCpuToLocalHbmDistance
   gNVIDIATokenSpaceGuid.PcdCpuToRemoteHbmDistance
-  gNVIDIATokenSpaceGuid.PcdLocalHbmToCpuDistance
-  gNVIDIATokenSpaceGuid.PcdRemoteHbmToCpuDistance
   gNVIDIATokenSpaceGuid.PcdHbmToLocalCpuDistance
   gNVIDIATokenSpaceGuid.PcdHbmToRemoteCpuDistance
   gNVIDIATokenSpaceGuid.PcdGpuToLocalHbmDistance
   gNVIDIATokenSpaceGuid.PcdGpuToRemoteHbmDistance
-  gNVIDIATokenSpaceGuid.PcdHbmToLocalGpuDistance
-  gNVIDIATokenSpaceGuid.PcdHbmToRemoteGpuDistance
   gNVIDIATokenSpaceGuid.PcdTegraStmmEnabled
   gNVIDIATokenSpaceGuid.PcdCpuToLocalCpuReadLatency
   gNVIDIATokenSpaceGuid.PcdCpuToLocalCpuWriteLatency

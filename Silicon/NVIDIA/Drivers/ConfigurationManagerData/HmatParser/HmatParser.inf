@@ -1,7 +1,7 @@
 ## @file
 #  HmatParser
 #
-#  SPDX-FileCopyrightText: Copyright (c) 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+#  SPDX-FileCopyrightText: Copyright (c) 2024-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 #
 #  SPDX-License-Identifier: BSD-2-Clause-Patent
 ##
@@ -36,31 +36,6 @@
   gEfiMdeModulePkgTokenSpaceGuid.PcdAcpiDefaultOemRevision
   gEfiMdeModulePkgTokenSpaceGuid.PcdAcpiDefaultOemId
   gEfiMdeModulePkgTokenSpaceGuid.PcdAcpiDefaultCreatorId
-  gNVIDIATokenSpaceGuid.PcdTegraMaxSockets
-  gNVIDIATokenSpaceGuid.PcdCpuToLocalCpuReadLatency
-  gNVIDIATokenSpaceGuid.PcdCpuToLocalCpuWriteLatency
-  gNVIDIATokenSpaceGuid.PcdCpuToLocalCpuAccessBandwidth
-  gNVIDIATokenSpaceGuid.PcdCpuToRemoteCpuReadLatency
-  gNVIDIATokenSpaceGuid.PcdCpuToRemoteCpuWriteLatency
-  gNVIDIATokenSpaceGuid.PcdCpuToRemoteCpuAccessBandwidth
-  gNVIDIATokenSpaceGuid.PcdCpuToLocalHbmReadLatency
-  gNVIDIATokenSpaceGuid.PcdCpuToLocalHbmWriteLatency
-  gNVIDIATokenSpaceGuid.PcdCpuToLocalHbmAccessBandwidth
-  gNVIDIATokenSpaceGuid.PcdCpuToRemoteHbmReadLatency
-  gNVIDIATokenSpaceGuid.PcdCpuToRemoteHbmWriteLatency
-  gNVIDIATokenSpaceGuid.PcdCpuToRemoteHbmAccessBandwidth
-  gNVIDIATokenSpaceGuid.PcdGpuToLocalHbmReadLatency
-  gNVIDIATokenSpaceGuid.PcdGpuToLocalHbmWriteLatency
-  gNVIDIATokenSpaceGuid.PcdGpuToLocalHbmAccessBandwidth
-  gNVIDIATokenSpaceGuid.PcdGpuToRemoteHbmAccessBandwidth
-  gNVIDIATokenSpaceGuid.PcdGpuToRemoteHbmReadLatency
-  gNVIDIATokenSpaceGuid.PcdGpuToRemoteHbmWriteLatency
-  gNVIDIATokenSpaceGuid.PcdGpuToLocalCpuReadLatency
-  gNVIDIATokenSpaceGuid.PcdGpuToLocalCpuWriteLatency
-  gNVIDIATokenSpaceGuid.PcdGpuToLocalCpuAccessBandwidth
-  gNVIDIATokenSpaceGuid.PcdGpuToRemoteCpuReadLatency
-  gNVIDIATokenSpaceGuid.PcdGpuToRemoteCpuWriteLatency
-  gNVIDIATokenSpaceGuid.PcdGpuToRemoteCpuAccessBandwidth
 
 [Guids]
 
