@@ -69,7 +69,7 @@ HmatParser (
   UINT16                                                                  ValueOffset;
   UINT32                                                                  *InitiatorProximityDomainList;
   UINT32                                                                  *TargetProximityDomainList;
-  UINT32                                                                  Index;
+  UINT32                                                                  ProximityDomain;
   UINT32                                                                  IndexInit;
   UINT32                                                                  IndexTarget;
   CM_STD_OBJ_ACPI_TABLE_INFO                                              AcpiTableHeader;
@@ -112,19 +112,19 @@ HmatParser (
 
   IndexInit   = 0;
   IndexTarget = 0;
-  for (Index = 0; Index <= MaxProximityDomain; Index++) {
-    Status = NumaInfoGetDomainDetails (Index, &DomainInfo);
+  for (ProximityDomain = 0; ProximityDomain <= MaxProximityDomain; ProximityDomain++) {
+    Status = NumaInfoGetDomainDetails (ProximityDomain, &DomainInfo);
     if (EFI_ERROR (Status)) {
       continue;
     }
 
     if (DomainInfo.InitiatorDomain) {
-      InitiatorProximityDomainList[IndexInit] = Index;
+      InitiatorProximityDomainList[IndexInit] = ProximityDomain;
       IndexInit++;
     }
 
     if (DomainInfo.TargetDomain) {
-      TargetProximityDomainList[IndexTarget] = Index;
+      TargetProximityDomainList[IndexTarget] = ProximityDomain;
       IndexTarget++;
     }
   }

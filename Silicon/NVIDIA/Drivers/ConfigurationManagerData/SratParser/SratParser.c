@@ -41,7 +41,8 @@ SratParser (
   VOID                                            *Hob;
   TEGRA_PLATFORM_RESOURCE_INFO                    *PlatformResourceInfo;
   CM_OBJ_DESCRIPTOR                               Desc;
-  UINT32                                          Index;
+  UINT32                                          GiIndex;
+  UINT32                                          ProximityDomain;
   UINT32                                          MaxProximityDomain;
   UINT32                                          NumberOfInitiatorDomains;
   UINT32                                          NumberOfTargetDomains;
@@ -98,8 +99,8 @@ SratParser (
     MemoryAffinityInfo[MemoryAffinityInfoIndex].Flags           = EFI_ACPI_6_6_MEMORY_ENABLED;
   }
 
-  for (Index = 0; Index <= MaxProximityDomain; Index++) {
-    Status = NumaInfoGetDomainDetails (Index, &DomainInfo);
+  for (ProximityDomain = 0; ProximityDomain <= MaxProximityDomain; ProximityDomain++) {
+    Status = NumaInfoGetDomainDetails (ProximityDomain, &DomainInfo);
     if (EFI_ERROR (Status)) {
       continue;
     }
@@ -111,7 +112,7 @@ SratParser (
         continue;
       }
 
-      MemoryAffinityInfo[MemoryAffinityInfoIndex].ProximityDomain = Index;
+      MemoryAffinityInfo[MemoryAffinityInfoIndex].ProximityDomain = ProximityDomain;
       MemoryAffinityInfo[MemoryAffinityInfoIndex].Flags           = EFI_ACPI_6_6_MEMORY_ENABLED|EFI_ACPI_6_6_MEMORY_HOT_PLUGGABLE;
       MemoryAffinityInfoIndex++;
     }
@@ -148,8 +149,8 @@ SratParser (
   }
 
   GenericInitiatorAffinityInfoIndex = 0;
-  for (Index = 0; Index <= MaxProximityDomain; Index++) {
-    Status = NumaInfoGetDomainDetails (Index, &DomainInfo);
+  for (ProximityDomain = 0; ProximityDomain <= MaxProximityDomain; ProximityDomain++) {
+    Status = NumaInfoGetDomainDetails (ProximityDomain, &DomainInfo);
     if (EFI_ERROR (Status)) {
       continue;
     }
@@ -167,7 +168,7 @@ SratParser (
         continue;
       }
 
-      GenericInitiatorAffinityInfo[GenericInitiatorAffinityInfoIndex].ProximityDomain  = Index;
+      GenericInitiatorAffinityInfo[GenericInitiatorAffinityInfoIndex].ProximityDomain  = ProximityDomain;
       GenericInitiatorAffinityInfo[GenericInitiatorAffinityInfoIndex].Flags            = EFI_ACPI_6_6_GENERIC_INITIATOR_AFFINITY_STRUCTURE_ENABLED|EFI_ACPI_6_6_GENERIC_INITIATOR_AFFINITY_STRUCTURE_ARCHITECTURAL_TRANSACTIONS;
       GenericInitiatorAffinityInfo[GenericInitiatorAffinityInfoIndex].DeviceHandleType = DomainInfo.DeviceHandleType;
       DeviceHandlePciInfo[GenericInitiatorAffinityInfoIndex].SegmentNumber             = DomainInfo.DeviceHandle.Pci.PciSegment;
@@ -190,8 +191,8 @@ SratParser (
       goto CleanupAndReturn;
     }
 
-    for (Index = 0; Index < GenericInitiatorAffinityInfoCount; Index++) {
-      GenericInitiatorAffinityInfo[Index].DeviceHandleToken = DeviceHandleTokenMap[Index];
+    for (GiIndex = 0; GiIndex < GenericInitiatorAffinityInfoCount; GiIndex++) {
+      GenericInitiatorAffinityInfo[GiIndex].DeviceHandleToken = DeviceHandleTokenMap[GiIndex];
     }
 
     Desc.ObjectId = CREATE_CM_ARCH_COMMON_OBJECT_ID (EArchCommonObjGenericInitiatorAffinityInfo);
