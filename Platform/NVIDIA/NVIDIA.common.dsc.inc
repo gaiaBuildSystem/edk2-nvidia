@@ -518,6 +518,8 @@ CONFIG_FMP_CERTIFICATES_DTB_MAX_SIZE=0
   BootConfigProtocolLib|Silicon/NVIDIA/Library/BootConfigProtocolLib/BootConfigProtocolLib.inf
   NctLib|Silicon/NVIDIA/Library/NctLib/NctLib.inf
 
+  ProtocolHelperLib|Silicon/NVIDIA/Library/ProtocolHelperLib/ProtocolHelperLib.inf
+
 [LibraryClasses.common.SEC]
   DebugAgentLib|ArmPkg/Library/DebugAgentSymbolsBaseLib/DebugAgentSymbolsBaseLib.inf
   DefaultExceptionHandlerLib|ArmPkg/Library/DefaultExceptionHandlerLib/DefaultExceptionHandlerLib.inf

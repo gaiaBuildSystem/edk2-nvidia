@@ -1,0 +1,31 @@
+/** @file
+
+  SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+
+  SPDX-License-Identifier: BSD-2-Clause-Patent
+
+**/
+
+[Defines]
+  INF_VERSION                    = 0x00010005
+  BASE_NAME                      = ProtocolHelperLib
+  FILE_GUID                      = f5107bb0-2471-404e-b02e-57defffda110
+  MODULE_TYPE                    = BASE
+  VERSION_STRING                 = 1.0
+  LIBRARY_CLASS                  = ProtocolHelperLib
+
+[Sources.common]
+  ProtocolHelperLib.c
+
+[Packages]
+  EmbeddedPkg/EmbeddedPkg.dec
+  MdePkg/MdePkg.dec
+  MdeModulePkg/MdeModulePkg.dec
+  Silicon/NVIDIA/NVIDIA.dec
+
+[LibraryClasses]
+  DebugLib
+  UefiBootServicesTableLib
+
+[Protocols]
+  gEfiDevicePathProtocolGuid
