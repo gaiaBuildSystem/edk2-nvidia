@@ -1012,7 +1012,7 @@ CONFIG_FMP_CERTIFICATES_DTB_MAX_SIZE=0
   gEfiMdeModulePkgTokenSpaceGuid.PcdAcpiExposedTableVersions|0x20
 
   # Use Segment numbers as PCI UID
-  gEdkiiDynamicTablesPkgTokenSpaceGuid.PcdPciUseSegmentAsUid|FALSE
+  gEdkiiDynamicTablesPkgTokenSpaceGuid.PcdPciUseSegmentAsUid|TRUE
 
   #
   # Security PCDs
