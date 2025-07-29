@@ -381,6 +381,7 @@ CONFIG_FMP_CERTIFICATES_DTB_MAX_SIZE=0
   FloorSweepingLib|Silicon/NVIDIA/Library/FloorSweepingLib/FloorSweepingLib.inf
   DeviceTreeHelperLib|Silicon/NVIDIA/Library/DeviceTreeHelperLib/DeviceTreeHelperLib.inf
   DisplayDeviceTreeHelperLib|Silicon/NVIDIA/Library/DisplayDeviceTreeHelperLib/DisplayDeviceTreeHelperLib.inf
+  DeviceTreeFdtBootHelperLib|Silicon/NVIDIA/Library/DeviceTreeFdtBootHelperLib/DeviceTreeFdtBootHelperLib.inf
 
   Crc8Lib|Silicon/NVIDIA/Library/Crc8Lib/Crc8Lib.inf
 

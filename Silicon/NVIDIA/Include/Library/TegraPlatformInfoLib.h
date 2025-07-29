@@ -31,6 +31,9 @@
 #define TH500_SKU         5
 #define TH500_PRESIL_SKU  253
 
+// FDT Boot blob data size
+#define FDT_BLOB_MAX_SIZE  (SIZE_64KB)
+
 #ifndef __ASSEMBLY__
 
 typedef enum {

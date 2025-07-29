@@ -1,0 +1,30 @@
+/** @file
+*
+*  SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+*
+*  SPDX-License-Identifier: BSD-2-Clause-Patent
+*
+**/
+
+[Defines]
+  INF_VERSION                    = 0x00010019
+  BASE_NAME                      = DeviceTreeFdtBootHelperLib
+  FILE_GUID                      = 1d8a36e9-34db-44a7-aa23-41cb318f2087
+  MODULE_TYPE                    = BASE
+  VERSION_STRING                 = 1.0
+  LIBRARY_CLASS                  = DeviceTreeFdtBootHelperLib
+
+[Sources]
+  DeviceTreeHelperLibFdtBoot.c
+
+[Packages]
+  EmbeddedPkg/EmbeddedPkg.dec
+  MdePkg/MdePkg.dec
+  Silicon/NVIDIA/NVIDIA.dec
+
+[LibraryClasses]
+  BaseLib
+  BaseMemoryLib
+  DebugLib
+  DeviceTreeHelperLib
+
