@@ -25,6 +25,7 @@
 #include <Library/IoLib.h>
 #include <Library/PrintLib.h>
 #include <Library/DeviceTreeHelperLib.h>
+#include <Library/TegraPlatformInfoLib.h>
 #include <Library/FdtLib.h>
 #include <Protocol/DeviceTreeNode.h>
 #include <Protocol/PinControl.h>
@@ -148,6 +149,11 @@ TegraI2cSetBusFrequency (
       (BusClockHertz == NULL))
   {
     return EFI_INVALID_PARAMETER;
+  }
+
+  // On presil, we don't need to set the bus frequency
+  if (TegraGetPlatform () != TEGRA_PLATFORM_SILICON) {
+    return EFI_SUCCESS;
   }
 
   Private = TEGRA_I2C_PRIVATE_DATA_FROM_MASTER (This);
