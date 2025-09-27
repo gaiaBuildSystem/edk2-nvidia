@@ -237,9 +237,9 @@ DeviceTreeGetSmtEnabled (
     return Status;
   }
 
-  Status = DeviceTreeGetNodePropertyValue32 (NodeOffset, "is_smt_enabled", SmtEnabled);
+  Status = DeviceTreeGetNodePropertyValue32 (NodeOffset, "is_smt2_enabled", SmtEnabled);
   if (EFI_ERROR (Status)) {
-    DEBUG ((DEBUG_ERROR, "Failed to get tegra-boot-params/is_smt_enabled property %r\n", Status));
+    DEBUG ((DEBUG_ERROR, "Failed to get tegra-boot-params/is_smt2_enabled property %r\n", Status));
     return Status;
   }
 
