@@ -22,11 +22,52 @@ SPDX-License-Identifier: BSD-2-Clause-Patent
 #include <Library/NVIDIADebugLib.h>
 #include <Library/BaseMemoryLib.h>
 #include <Library/MemoryAllocationLib.h>
+#include <Library/ArmFfaLib.h>
+
+#define SIP_MISC_MAGIC_OFFSET               0
+#define SIP_MISC_MAGIC_VAL                  0x11150C1D
+#define SIP_MISC_FEATURE_OFFSET             0x8
+#define SIP_MISC_FEATURE_PRE_SI_PLAT_SHIFT  0
+#define SIP_MISC_FEATURE_PRE_SI_PLAT_MASK   0xff
 
 #define HIDREV_OFFSET             0x4
 #define HIDREV_PRE_SI_PLAT_SHIFT  0x14
 #define HIDREV_PRE_SI_PLAT_MASK   0xf
 #define UEFI_VARS_SOCKET          0
+
+#define SOC_ID_VERSION_CHIPID_SHIFT         4
+#define SOC_ID_VERSION_CHIPID_MASK          0xfff
+#define SMCCC_ARCH_SOC_ID_GET_SOC_VERSION   0
+#define SMCCC_ARCH_SOC_ID_GET_SOC_REVISION  1
+
+STATIC
+UINT32
+TegraGetChipIDMm (
+  VOID
+  )
+{
+  UINT32        ChipId;
+  ARM_SVC_ARGS  Args;
+
+  if (PcdGetBool (PcdFfaLibConduitSmc) == TRUE) {
+    ChipId = TegraGetChipID ();
+  } else {
+    /**
+     * This is a hack to get the chip ID for the Arm Standalone MM.
+     * We need to get the chip ID from the SMCCC_ARCH_SOC_ID register.
+     */
+    ZeroMem (&Args, sizeof (Args));
+    Args.Arg0 = SMCCC_ARCH_SOC_ID;
+    Args.Arg1 = SMCCC_ARCH_SOC_ID_GET_SOC_VERSION;
+    ArmCallSvc (&Args);
+
+    ChipId = Args.Arg0 >> SOC_ID_VERSION_CHIPID_SHIFT;
+    ChipId = ChipId & SOC_ID_VERSION_CHIPID_MASK;
+  }
+
+  DEBUG ((DEBUG_INFO, "%a: ChipId %u\n", __FUNCTION__, ChipId));
+  return ChipId;
+}
 
 EFIAPI
 BOOLEAN
@@ -50,12 +91,18 @@ GetDeviceRegion (
   UINTN                 Index;
   EFI_HOB_GUID_TYPE     *GuidHob;
 
-  GuidHob = GetFirstGuidHob (&gEfiStandaloneMmDeviceMemoryRegions);
+  if (PcdGetBool (PcdFfaLibConduitSmc) == TRUE) {
+    GuidHob = GetFirstGuidHob (&gEfiStandaloneMmDeviceMemoryRegions);
+  } else {
+    GuidHob = GetFirstGuidHob (&gArmStandaloneMmDeviceMemoryRegions);
+  }
+
   NV_ASSERT_RETURN (
     GuidHob != NULL,
     return Status,
-    "%a: Unable to find HOB for gEfiStandaloneMmDeviceMemoryRegions\n",
-    __FUNCTION__
+    "%a: Unable to find HOB for %a\n",
+    __FUNCTION__,
+    PcdGetBool (PcdFfaLibConduitSmc) ? "gEfiStandaloneMmDeviceMemoryRegions" : "gArmStandaloneMmDeviceMemoryRegions"
     );
 
   DeviceRegionMap = GET_GUID_HOB_DATA (GuidHob);
@@ -84,12 +131,18 @@ IsDeviceTypePresent (
   BOOLEAN               DeviceTypePresent = FALSE;
   UINT32                NumDevices;
 
-  GuidHob = GetFirstGuidHob (&gEfiStandaloneMmDeviceMemoryRegions);
+  if (PcdGetBool (PcdFfaLibConduitSmc) == TRUE) {
+    GuidHob = GetFirstGuidHob (&gEfiStandaloneMmDeviceMemoryRegions);
+  } else {
+    GuidHob = GetFirstGuidHob (&gArmStandaloneMmDeviceMemoryRegions);
+  }
+
   NV_ASSERT_RETURN (
     GuidHob != NULL,
     return DeviceTypePresent,
-    "%a: Unable to find HOB for gEfiStandaloneMmDeviceMemoryRegions\n",
-    __FUNCTION__
+    "%a: Unable to find HOB for %a\n",
+    __FUNCTION__,
+    PcdGetBool (PcdFfaLibConduitSmc) ? "gEfiStandaloneMmDeviceMemoryRegions" : "gArmStandaloneMmDeviceMemoryRegions"
     );
 
   DeviceRegionMap = GET_GUID_HOB_DATA (GuidHob);
@@ -177,7 +230,12 @@ GetDeviceTypeRegions (
     goto ExitGetDeviceTypeRegions;
   }
 
-  GuidHob = GetFirstGuidHob (&gEfiStandaloneMmDeviceMemoryRegions);
+  if (PcdGetBool (PcdFfaLibConduitSmc) == TRUE) {
+    GuidHob = GetFirstGuidHob (&gEfiStandaloneMmDeviceMemoryRegions);
+  } else {
+    GuidHob = GetFirstGuidHob (&gArmStandaloneMmDeviceMemoryRegions);
+  }
+
   if (GuidHob == NULL) {
     DEBUG ((
       DEBUG_ERROR,
@@ -226,24 +284,43 @@ GetPlatformTypeMm (
   VOID
   )
 {
-  TEGRA_PLATFORM_TYPE  PlatformType;
-  UINT64               MiscAddress;
-  UINTN                MiscRegionSize;
-  EFI_STATUS           Status;
-  UINT32               HidRev;
+  UINT64      MiscAddress;
+  UINTN       MiscRegionSize;
+  EFI_STATUS  Status;
+  UINT32      Hidrev;
+  UINT32      Feature;
+  UINT32      PlatType;
 
   Status = GetDeviceRegion ("tegra-misc", &MiscAddress, &MiscRegionSize);
   if (EFI_ERROR (Status)) {
-    PlatformType = TEGRA_PLATFORM_UNKNOWN;
+    DEBUG ((DEBUG_ERROR, "%a: Failed to get tegra-misc region %r\n", __FUNCTION__, Status));
+    PlatType = TEGRA_PLATFORM_UNKNOWN;
+    goto ExitGetPlatformTypeMm;
   } else {
-    HidRev       = MmioRead32 (MiscAddress + HIDREV_OFFSET);
-    PlatformType = ((HidRev >> HIDREV_PRE_SI_PLAT_SHIFT) & HIDREV_PRE_SI_PLAT_MASK);
-    if (PlatformType >= TEGRA_PLATFORM_UNKNOWN) {
-      PlatformType =  TEGRA_PLATFORM_UNKNOWN;
+    // Check if SIP is present.
+    if (MmioRead32 (MiscAddress + SIP_MISC_MAGIC_OFFSET) == SIP_MISC_MAGIC_VAL) {
+      Feature  = MmioRead32 (MiscAddress + SIP_MISC_FEATURE_OFFSET);
+      PlatType = ((Feature >> SIP_MISC_FEATURE_PRE_SI_PLAT_SHIFT) & SIP_MISC_FEATURE_PRE_SI_PLAT_MASK);
+      if (PlatType >= TEGRA_PLATFORM_UNKNOWN) {
+        PlatType = TEGRA_PLATFORM_UNKNOWN;
+        goto ExitGetPlatformTypeMm;
+      } else {
+        goto ExitGetPlatformTypeMm;
+      }
+    } else {
+      Hidrev   = MmioRead32 (MiscAddress + HIDREV_OFFSET);
+      PlatType = ((Hidrev >> HIDREV_PRE_SI_PLAT_SHIFT) & HIDREV_PRE_SI_PLAT_MASK);
+      if (PlatType >= TEGRA_PLATFORM_UNKNOWN) {
+        PlatType = TEGRA_PLATFORM_UNKNOWN;
+      } else {
+        return PlatType;
+      }
     }
   }
 
-  return PlatformType;
+ExitGetPlatformTypeMm:
+  DEBUG ((DEBUG_ERROR, "%a: PlatformType %u\n", __FUNCTION__, PlatType));
+  return PlatType;
 }
 
 EFIAPI
@@ -252,11 +329,17 @@ InFbc (
   VOID
   )
 {
-  EFI_HOB_GUID_TYPE  *GuidHob;
-  STMM_COMM_BUFFERS  *StmmCommBuffers;
-  BOOLEAN            Fbc;
+  EFI_HOB_GUID_TYPE            *GuidHob;
+  STMM_COMM_BUFFERS            *StmmCommBuffers;
+  STANDALONE_MM_PLATFORM_INFO  *StandaloneMmPlatformInfo;
+  BOOLEAN                      Fbc;
 
-  GuidHob = GetFirstGuidHob (&gNVIDIAStMMBuffersGuid);
+  if (PcdGetBool (PcdFfaLibConduitSmc) == TRUE) {
+    GuidHob = GetFirstGuidHob (&gNVIDIAStMMBuffersGuid);
+  } else {
+    GuidHob = GetFirstGuidHob (&gArmStandaloneMmPlatformInfoGuid);
+  }
+
   if (GuidHob == NULL) {
     if (IsOpteePresent ()) {
       Fbc = TRUE;
@@ -266,8 +349,14 @@ InFbc (
     }
   }
 
-  StmmCommBuffers = (STMM_COMM_BUFFERS *)GET_GUID_HOB_DATA (GuidHob);
-  Fbc             = StmmCommBuffers->Fbc;
+  if (PcdGetBool (PcdFfaLibConduitSmc) == TRUE) {
+    StmmCommBuffers = (STMM_COMM_BUFFERS *)GET_GUID_HOB_DATA (GuidHob);
+    Fbc             = StmmCommBuffers->Fbc;
+  } else {
+    StandaloneMmPlatformInfo = (STANDALONE_MM_PLATFORM_INFO *)GET_GUID_HOB_DATA (GuidHob);
+    Fbc                      = StandaloneMmPlatformInfo->IsFbc;
+  }
+
 ExitInFbc:
   return Fbc;
 }
@@ -280,9 +369,15 @@ GetBootType (
 {
   EFI_HOB_GUID_TYPE             *GuidHob;
   TEGRA_PLATFORM_RESOURCE_INFO  *PlatformResourceInfo;
+  STANDALONE_MM_PLATFORM_INFO   *StandaloneMmPlatformInfo;
   TEGRA_BOOT_TYPE               BootType;
 
-  GuidHob = GetFirstGuidHob (&gNVIDIAPlatformResourceDataGuid);
+  if (PcdGetBool (PcdFfaLibConduitSmc) == TRUE) {
+    GuidHob = GetFirstGuidHob (&gNVIDIAPlatformResourceDataGuid);
+  } else {
+    GuidHob = GetFirstGuidHob (&gArmStandaloneMmPlatformInfoGuid);
+  }
+
   if (GuidHob == NULL) {
     if (IsOpteePresent ()) {
       BootType = TegrablBootInvalid;
@@ -292,8 +387,14 @@ GetBootType (
     }
   }
 
-  PlatformResourceInfo = (TEGRA_PLATFORM_RESOURCE_INFO *)GET_GUID_HOB_DATA (GuidHob);
-  BootType             = PlatformResourceInfo->BootType;
+  if (PcdGetBool (PcdFfaLibConduitSmc) == TRUE) {
+    PlatformResourceInfo = (TEGRA_PLATFORM_RESOURCE_INFO *)GET_GUID_HOB_DATA (GuidHob);
+    BootType             = PlatformResourceInfo->BootType;
+  } else {
+    StandaloneMmPlatformInfo = (STANDALONE_MM_PLATFORM_INFO *)GET_GUID_HOB_DATA (GuidHob);
+    BootType                 = StandaloneMmPlatformInfo->BootType;
+  }
+
 ExitBootType:
   return BootType;
 }
@@ -431,7 +532,8 @@ GetVarStoreCs (
     *VarCs = NOR_FLASH_CHIP_SELECT_JETSON;
     Status = EFI_SUCCESS;
   } else {
-    ChipId = TegraGetChipID ();
+    DEBUG ((DEBUG_INFO, "%a: GetVarStoreCs\n", __FUNCTION__));
+    ChipId = TegraGetChipIDMm ();
 
     /* Branch here for non-OPTEE based platforms
        As the GetChipID() is not available for OPTEE based platforms.

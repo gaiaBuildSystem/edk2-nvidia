@@ -82,6 +82,14 @@ typedef struct {
   BOOLEAN             Fbc;
 } STMM_COMM_BUFFERS;
 
+typedef struct {
+  BOOLEAN            IsFbc;
+  TEGRA_BOOT_TYPE    BootType;
+  UINT32             SocketMask;
+  UINT64             ErstBase;
+  UINT64             ErstSize;
+} STANDALONE_MM_PLATFORM_INFO;
+
 EFIAPI
 EFI_STATUS
 GetDeviceRegion (

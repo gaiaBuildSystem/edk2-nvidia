@@ -44,6 +44,9 @@
 [FeaturePcd.AARCH64]
   gNVIDIATokenSpaceGuid.PcdFfaMinorV2Supported
 
+[Pcd]
+  gEfiMdeModulePkgTokenSpaceGuid.PcdFfaLibConduitSmc
+
 [Protocols]
   gNVIDIASocketIdProtocolGuid
   gNVIDIAQspiControllerProtocolGuid
@@ -53,4 +56,6 @@
   gEfiStandaloneMmDeviceMemoryRegions
   gNVIDIAPlatformResourceDataGuid
   gNVIDIAStMMBuffersGuid
+  gArmStandaloneMmDeviceMemoryRegions
+  gArmStandaloneMmPlatformInfoGuid
 
