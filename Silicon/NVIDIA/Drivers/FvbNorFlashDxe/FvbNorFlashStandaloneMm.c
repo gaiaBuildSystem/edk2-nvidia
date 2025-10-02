@@ -1293,37 +1293,16 @@ FvbInitializeNoGpt (
   OUT UINT64                *FtwSize
   )
 {
-  EFI_STATUS            Status;
-  UINT16                DeviceInstance;
-  UINT64                VOffset;
-  UINT64                VSize;
-  UINT64                FOffset;
-  UINT64                FSize;
-  EFI_PHYSICAL_ADDRESS  CpuBlParamsAddr;
+  EFI_STATUS      Status;
+  PARTITION_INFO  PartitionInfo;
 
   *VariableOffset = 0;
   *VariableSize   = 0;
   *FtwOffset      = 0;
   *FtwSize        = 0;
 
-  Status = GetCpuBlParamsAddrStMm (&CpuBlParamsAddr);
-  if (EFI_ERROR (Status)) {
-    DEBUG ((
-      DEBUG_ERROR,
-      "%a: Failed to get CPU BL Addr %r\n",
-      __FUNCTION__,
-      Status
-      ));
-    return Status;
-  }
-
-  Status = GetPartitionInfoStMm (
-             (UINTN)CpuBlParamsAddr,
-             TEGRABL_VARIABLE_IMAGE_INDEX,
-             &DeviceInstance,
-             &VOffset,
-             &VSize
-             );
+  DEBUG ((DEBUG_INFO, "%a: Getting Variable partition Info\n", __FUNCTION__));
+  Status = GetPartitionData (TEGRABL_VARIABLE_IMAGE_INDEX, &PartitionInfo);
   if (EFI_ERROR (Status)) {
     DEBUG ((
       DEBUG_ERROR,
@@ -1334,14 +1313,11 @@ FvbInitializeNoGpt (
     return Status;
   }
 
-  DeviceInstance = 0;
-  Status         = GetPartitionInfoStMm (
-                     (UINTN)CpuBlParamsAddr,
-                     TEGRABL_FTW_IMAGE_INDEX,
-                     &DeviceInstance,
-                     &FOffset,
-                     &FSize
-                     );
+  *VariableOffset = PartitionInfo.PartitionByteOffset;
+  *VariableSize   = PartitionInfo.PartitionSize;
+  DEBUG ((DEBUG_INFO, "%a: Variable Offset %lu Variable Size %lu\n", __FUNCTION__, *VariableOffset, *VariableSize));
+
+  Status = GetPartitionData (TEGRABL_FTW_IMAGE_INDEX, &PartitionInfo);
   if (EFI_ERROR (Status)) {
     DEBUG ((
       DEBUG_ERROR,
@@ -1352,10 +1328,9 @@ FvbInitializeNoGpt (
     return Status;
   }
 
-  *VariableOffset = VOffset;
-  *VariableSize   = VSize;
-  *FtwOffset      = FOffset;
-  *FtwSize        = FSize;
+  *FtwOffset = PartitionInfo.PartitionByteOffset;
+  *FtwSize   = PartitionInfo.PartitionSize;
+  DEBUG ((DEBUG_INFO, "%a: FTW Offset %lu FTW Size %lu\n", __FUNCTION__, *FtwOffset, *FtwSize));
 
   Status = ValidatePartitionInfo (
              NorFlashAttributes,
@@ -1364,6 +1339,15 @@ FvbInitializeNoGpt (
              *FtwOffset,
              *FtwSize
              );
+  if (EFI_ERROR (Status)) {
+    DEBUG ((
+      DEBUG_ERROR,
+      "%a: Failed to validate partition Info %r\n",
+      __FUNCTION__,
+      Status
+      ));
+  }
+
   return Status;
 }
 

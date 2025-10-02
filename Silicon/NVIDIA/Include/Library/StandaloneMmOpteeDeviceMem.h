@@ -48,6 +48,8 @@ SPDX-License-Identifier: BSD-2-Clause-Patent
 #define FFA_OK  0
 
 #define ADDRESS_IN_RANGE(addr, min, max)  (((addr) > (min)) && ((addr) < (max)))
+#define NVPT_PATITION_NAME_MAX_LEN  36
+#define NVPT_HEADER_MAGIC           0x706172748F9E8D8B
 
 typedef struct _NVIDIA_VAR_INT_PROTOCOL NVIDIA_VAR_INT_PROTOCOL;
 
@@ -89,6 +91,35 @@ typedef struct {
   UINT64             ErstBase;
   UINT64             ErstSize;
 } STANDALONE_MM_PLATFORM_INFO;
+
+typedef struct {
+  UINT64    Magic;
+  UINT32    Version;
+  UINT32    EntrySize;
+  UINT32    NumEntries;
+  UINT32    MaxEntries;
+  UINT8     Rsvd1[40];
+  UINT8     ShaHash[48];
+} NVPT_HEADER;
+
+typedef struct {
+  UINT32    PartitionType;
+  CHAR8     PartitionName[NVPT_PATITION_NAME_MAX_LEN];
+  UINT32    DeviceId;
+  UINT32    DeviceInstance;
+  UINT32    DeviceChipSelect;
+  UINT32    Rsvd1;
+  UINT64    StartAddress;
+  UINT64    PartitionSize;
+  UINT64    PartitionAttributes;
+  UINT8     Rsvd2[16];
+} NVPT_PARTITION_INFO;
+
+EFI_STATUS
+EFIAPI
+DumpNvptPartitionInfo (
+  VOID
+  );
 
 EFIAPI
 EFI_STATUS

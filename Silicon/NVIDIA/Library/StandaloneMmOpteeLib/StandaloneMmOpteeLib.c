@@ -821,6 +821,223 @@ GetSocketQspiProtocol (
 }
 
 /**
+ * Dump the sysram-pt partition info.
+ *
+ * @param[in] SysRamL1PtAddr Sysram-pt partition address.
+ */
+STATIC
+VOID
+DumpSysRamL1Pt (
+  IN EFI_PHYSICAL_ADDRESS  SysRamL1PtAddr
+  )
+{
+  DEBUG_CODE_BEGIN ();
+  NVPT_HEADER          *NvptHeader;
+  NVPT_PARTITION_INFO  *NvptPartitionInfo;
+  UINTN                Index;
+
+  NvptHeader        = (NVPT_HEADER *)SysRamL1PtAddr;
+  NvptPartitionInfo = (NVPT_PARTITION_INFO *)(SysRamL1PtAddr + sizeof (NVPT_HEADER));
+  DEBUG ((DEBUG_ERROR, "%a: SysRamL1PtAddr: 0x%lx\n", __FUNCTION__, SysRamL1PtAddr));
+  DEBUG ((DEBUG_ERROR, "%a: NvptHeader Magic: 0x%lx\n", __FUNCTION__, NvptHeader->Magic));
+  DEBUG ((DEBUG_ERROR, "%a: NvptHeader Version: 0x%lx\n", __FUNCTION__, NvptHeader->Version));
+  DEBUG ((DEBUG_ERROR, "%a: NvptHeader EntrySize: 0x%lx\n", __FUNCTION__, NvptHeader->EntrySize));
+  DEBUG ((DEBUG_ERROR, "%a: NvptHeader NumEntries: 0x%lx\n", __FUNCTION__, NvptHeader->NumEntries));
+  DEBUG ((DEBUG_ERROR, "%a: NvptHeader MaxEntries: 0x%lx\n", __FUNCTION__, NvptHeader->MaxEntries));
+  DEBUG ((DEBUG_ERROR, "%a: NvptHeader ShaHash: 0x%lx\n", __FUNCTION__, NvptHeader->ShaHash));
+  for (Index = 0; Index < 48; Index++) {
+    DEBUG ((DEBUG_ERROR, "%a: NvptHeader ShaHash[%u]: 0x%02x\n", __FUNCTION__, Index, NvptHeader->ShaHash[Index]));
+  }
+
+  for (Index = 0; Index < NvptHeader->NumEntries; Index++) {
+    DEBUG ((DEBUG_ERROR, "%a: NvptPartitionInfo[%u].PartitionName: %a\n", __FUNCTION__, Index, NvptPartitionInfo[Index].PartitionName));
+    DEBUG ((DEBUG_ERROR, "%a: NvptPartitionInfo[%u].StartAddress: 0x%lx\n", __FUNCTION__, Index, NvptPartitionInfo[Index].StartAddress));
+    DEBUG ((DEBUG_ERROR, "%a: NvptPartitionInfo[%u].PartitionSize: 0x%lx\n", __FUNCTION__, Index, NvptPartitionInfo[Index].PartitionSize));
+  }
+
+  DEBUG_CODE_END ();
+}
+
+/**
+ * Get the partition info entry for a given partition name.
+ *
+ * @param[in] PartitionName  Partition name to search for.
+ * @param[in] NvptHeaderAddr Nvpt header address.
+ * @param[out] PartitionInfo Partition info structure.
+ *
+ * @retval EFI_SUCCESS      Successfully got the partition info entry.
+ *            EFI_NOT_FOUND  Partition not found.
+ */
+STATIC
+EFI_STATUS
+GetPartitionInfoEntrySysRamPt (
+  IN  CHAR8                 *PartitionName,
+  IN  EFI_PHYSICAL_ADDRESS  NvptHeaderAddr,
+  OUT PARTITION_INFO        *PartitionInfo
+  )
+{
+  NVPT_HEADER          *NvptHeader;
+  NVPT_PARTITION_INFO  *NvptPartitionInfo;
+  UINT32               Index;
+
+  NvptHeader        = (NVPT_HEADER *)NvptHeaderAddr;
+  NvptPartitionInfo = (NVPT_PARTITION_INFO *)(NvptHeaderAddr + sizeof (NVPT_HEADER));
+
+  for (Index = 0; Index < NvptHeader->NumEntries; Index++) {
+    if (AsciiStrnCmp (NvptPartitionInfo[Index].PartitionName, PartitionName, NVPT_PATITION_NAME_MAX_LEN) == 0) {
+      PartitionInfo->PartitionByteOffset = NvptPartitionInfo[Index].StartAddress;
+      PartitionInfo->PartitionSize       = NvptPartitionInfo[Index].PartitionSize;
+      return EFI_SUCCESS;
+    }
+  }
+
+  return EFI_NOT_FOUND;
+}
+
+/**
+ * Get the base address of the sysram-pt partition.
+ *
+ * @retval EFI_SUCCESS      Successfully got the base address.
+ *            EFI_UNSUPPORTED  Failed to get the base address.
+ **/
+EFI_STATUS
+EFIAPI
+GetPartitionInfoSysRamPt (
+  IN  UINT32          PartitionIndex,
+  OUT PARTITION_INFO  *PartitionInfo
+  )
+{
+  NVPT_HEADER           *NvptHeader;
+  EFI_PHYSICAL_ADDRESS  NvptHeaderAddr;
+  UINTN                 NvptHeaderSize;
+  EFI_STATUS            Status;
+
+  Status = GetDeviceRegion ("sysram-pt", &NvptHeaderAddr, &NvptHeaderSize);
+  if (EFI_ERROR (Status)) {
+    return Status;
+  }
+
+  DEBUG ((DEBUG_ERROR, "%a: NvptHeaderAddr=%llu NvptHeaderSize=%u\n", __FUNCTION__, NvptHeaderAddr, NvptHeaderSize));
+  NvptHeader = (NVPT_HEADER *)NvptHeaderAddr;
+  DumpSysRamL1Pt (NvptHeaderAddr);
+
+  /* Sanity check the NvptHeader
+     The Magic should be ({ 8B, 8D, 9E, 8F, 74, 72, 61, 70 })
+     The EntrySize should be sizeof (NVPT_PARTITION_INFO)
+     The NumEntries should be greater than 0
+     The MaxEntries should be greater than 0
+
+     Don't check the version for now, as it doesn't impact the partition info.(we check the size of the entry)
+  */
+  if (  (NvptHeader->Magic != NVPT_HEADER_MAGIC) || (NvptHeader->EntrySize != sizeof (NVPT_PARTITION_INFO))
+     || (NvptHeader->NumEntries == 0) || (NvptHeader->MaxEntries == 0))
+  {
+    DEBUG ((DEBUG_ERROR, "%a: NvptHeader is invalid\n", __FUNCTION__));
+    DEBUG ((DEBUG_ERROR, "%a: NvptHeader Magic=0x%llx Version=%u EntrySize=%u NumEntries=%u MaxEntries=%u\n", __FUNCTION__, NvptHeader->Magic, NvptHeader->Version, NvptHeader->EntrySize, NvptHeader->NumEntries, NvptHeader->MaxEntries));
+    return EFI_DEVICE_ERROR;
+  }
+
+  /* Do this mapping here, so we don't have to change the code that relies on the partition index. */
+  switch (PartitionIndex) {
+    case TEGRABL_VARIABLE_IMAGE_INDEX:
+      Status = GetPartitionInfoEntrySysRamPt (UEFI_VAR_PARTITION_NAME, NvptHeaderAddr, PartitionInfo);
+      break;
+    case TEGRABL_FTW_IMAGE_INDEX:
+      Status = GetPartitionInfoEntrySysRamPt (UEFI_FTW_PARTITION_NAME, NvptHeaderAddr, PartitionInfo);
+      break;
+    case TEGRABL_RAS_ERROR_LOGS:
+      Status = GetPartitionInfoEntrySysRamPt (UEFI_RAS_ERROR_LOGS_PARTITION_NAME, NvptHeaderAddr, PartitionInfo);
+      break;
+    case TEGRABL_EARLY_BOOT_VARS:
+      Status = GetPartitionInfoEntrySysRamPt (UEFI_EARLY_BOOT_VARS_PARTITION_NAME, NvptHeaderAddr, PartitionInfo);
+      break;
+    case TEGRABL_CMET:
+      Status = GetPartitionInfoEntrySysRamPt (UEFI_CMET_PARTITION_NAME, NvptHeaderAddr, PartitionInfo);
+      break;
+    case TEGRABL_OEM:
+      Status = GetPartitionInfoEntrySysRamPt (UEFI_OEM_PARTITION_NAME, NvptHeaderAddr, PartitionInfo);
+      break;
+    case TEGRABL_ERST:
+      Status = GetPartitionInfoEntrySysRamPt (UEFI_ERST_PARTITION_NAME, NvptHeaderAddr, PartitionInfo);
+      break;
+    default:
+      return EFI_UNSUPPORTED;
+  }
+
+  PartitionInfo->PartitionIndex = PartitionIndex;
+
+  return Status;
+}
+
+EFI_STATUS
+EFIAPI
+DumpNvptPartitionInfo (
+  VOID
+  )
+{
+  EFI_STATUS      Status;
+  PARTITION_INFO  PartitionInfo;
+
+  Status = GetPartitionInfoSysRamPt (TEGRABL_VARIABLE_IMAGE_INDEX, &PartitionInfo);
+  if (EFI_ERROR (Status)) {
+    DEBUG ((DEBUG_ERROR, "%a: Failed to get Variable partition Info %r\n", __FUNCTION__, Status));
+    return Status;
+  } else {
+    DEBUG ((DEBUG_INFO, "%a: PartitionInfo PartitionByteOffset=%llu PartitionSize=%llu PartitionIndex=%u\n", __FUNCTION__, PartitionInfo.PartitionByteOffset, PartitionInfo.PartitionSize, PartitionInfo.PartitionIndex));
+  }
+
+  Status = GetPartitionInfoSysRamPt (TEGRABL_FTW_IMAGE_INDEX, &PartitionInfo);
+  if (EFI_ERROR (Status)) {
+    DEBUG ((DEBUG_ERROR, "%a: Failed to get FTW partition Info %r\n", __FUNCTION__, Status));
+    return Status;
+  } else {
+    DEBUG ((DEBUG_INFO, "%a: PartitionInfo PartitionByteOffset=%llu PartitionSize=%llu PartitionIndex=%u\n", __FUNCTION__, PartitionInfo.PartitionByteOffset, PartitionInfo.PartitionSize, PartitionInfo.PartitionIndex));
+  }
+
+  Status = GetPartitionInfoSysRamPt (TEGRABL_RAS_ERROR_LOGS, &PartitionInfo);
+  if (EFI_ERROR (Status)) {
+    DEBUG ((DEBUG_ERROR, "%a: Failed to get RAS Error Logs partition Info %r\n", __FUNCTION__, Status));
+    return Status;
+  } else {
+    DEBUG ((DEBUG_INFO, "%a: PartitionInfo PartitionByteOffset=%llu PartitionSize=%llu PartitionIndex=%u\n", __FUNCTION__, PartitionInfo.PartitionByteOffset, PartitionInfo.PartitionSize, PartitionInfo.PartitionIndex));
+  }
+
+  Status = GetPartitionInfoSysRamPt (TEGRABL_EARLY_BOOT_VARS, &PartitionInfo);
+  if (EFI_ERROR (Status)) {
+    DEBUG ((DEBUG_ERROR, "%a: Failed to get Early Boot Vars partition Info %r\n", __FUNCTION__, Status));
+    return Status;
+  } else {
+    DEBUG ((DEBUG_INFO, "%a: PartitionInfo PartitionByteOffset=%llu PartitionSize=%llu PartitionIndex=%u\n", __FUNCTION__, PartitionInfo.PartitionByteOffset, PartitionInfo.PartitionSize, PartitionInfo.PartitionIndex));
+  }
+
+  Status = GetPartitionInfoSysRamPt (TEGRABL_CMET, &PartitionInfo);
+  if (EFI_ERROR (Status)) {
+    DEBUG ((DEBUG_ERROR, "%a: Failed to get CMET partition Info %r\n", __FUNCTION__, Status));
+    return Status;
+  } else {
+    DEBUG ((DEBUG_INFO, "%a: PartitionInfo PartitionByteOffset=%llu PartitionSize=%llu PartitionIndex=%u\n", __FUNCTION__, PartitionInfo.PartitionByteOffset, PartitionInfo.PartitionSize, PartitionInfo.PartitionIndex));
+  }
+
+  Status = GetPartitionInfoSysRamPt (TEGRABL_OEM, &PartitionInfo);
+  if (EFI_ERROR (Status)) {
+    DEBUG ((DEBUG_ERROR, "%a: Failed to get OEM partition Info %r\n", __FUNCTION__, Status));
+    return Status;
+  } else {
+    DEBUG ((DEBUG_INFO, "%a: PartitionInfo PartitionByteOffset=%llu PartitionSize=%llu PartitionIndex=%u\n", __FUNCTION__, PartitionInfo.PartitionByteOffset, PartitionInfo.PartitionSize, PartitionInfo.PartitionIndex));
+  }
+
+  Status = GetPartitionInfoSysRamPt (TEGRABL_ERST, &PartitionInfo);
+  if (EFI_ERROR (Status)) {
+    DEBUG ((DEBUG_ERROR, "%a: Failed to get ERST partition Info %r\n", __FUNCTION__, Status));
+    return Status;
+  } else {
+    DEBUG ((DEBUG_INFO, "%a: PartitionInfo PartitionByteOffset=%llu PartitionSize=%llu PartitionIndex=%u\n", __FUNCTION__, PartitionInfo.PartitionByteOffset, PartitionInfo.PartitionSize, PartitionInfo.PartitionIndex));
+  }
+
+  return EFI_SUCCESS;
+}
+
+/**
  * GetPartitionData for a given Partition Index by looking up the CPUBL Params.
  *
  * @params[in]   PartitionIndex  Index into CPU BL's partition Info structure.
@@ -844,39 +1061,52 @@ GetPartitionData (
   UINT64                PartitionByteOffset;
   UINT64                PartitionSize;
 
-  Status = GetCpuBlParamsAddrStMm (&CpuBlParamsAddr);
-  if (EFI_ERROR (Status)) {
-    DEBUG ((
-      DEBUG_ERROR,
-      "%a: Failed to get CpuBl Addr %r\n",
-      __FUNCTION__,
-      Status
-      ));
-    goto ExitGetPartitionData;
+  if (IsDeviceTypePresent ("sysram-pt", NULL)) {
+    Status = GetPartitionInfoSysRamPt (PartitionIndex, PartitionInfo);
+    if (EFI_ERROR (Status)) {
+      DEBUG ((
+        DEBUG_ERROR,
+        "%a: Failed to get SysRamPt partition Info %r\n",
+        __FUNCTION__,
+        Status
+        ));
+      goto ExitGetPartitionData;
+    }
+  } else {
+    Status = GetCpuBlParamsAddrStMm (&CpuBlParamsAddr);
+    if (EFI_ERROR (Status)) {
+      DEBUG ((
+        DEBUG_ERROR,
+        "%a: Failed to get CpuBl Addr %r\n",
+        __FUNCTION__,
+        Status
+        ));
+      goto ExitGetPartitionData;
+    }
+
+    Status = GetPartitionInfoStMm (
+               (UINTN)CpuBlParamsAddr,
+               PartitionIndex,
+               &DeviceInstance,
+               &PartitionByteOffset,
+               &PartitionSize
+               );
+    if (EFI_ERROR (Status)) {
+      DEBUG ((
+        DEBUG_ERROR,
+        "%a:Failed to get %u PartitionInfo %r\n",
+        __FUNCTION__,
+        PartitionIndex,
+        Status
+        ));
+
+      goto ExitGetPartitionData;
+    }
+
+    PartitionInfo->PartitionByteOffset = PartitionByteOffset;
+    PartitionInfo->PartitionSize       = PartitionSize;
+    PartitionInfo->PartitionIndex      = PartitionIndex;
   }
-
-  Status = GetPartitionInfoStMm (
-             (UINTN)CpuBlParamsAddr,
-             PartitionIndex,
-             &DeviceInstance,
-             &PartitionByteOffset,
-             &PartitionSize
-             );
-  if (EFI_ERROR (Status)) {
-    DEBUG ((
-      DEBUG_ERROR,
-      "%a:Failed to get %u PartitionInfo %r\n",
-      __FUNCTION__,
-      PartitionIndex,
-      Status
-      ));
-
-    goto ExitGetPartitionData;
-  }
-
-  PartitionInfo->PartitionByteOffset = PartitionByteOffset;
-  PartitionInfo->PartitionSize       = PartitionSize;
-  PartitionInfo->PartitionIndex      = PartitionIndex;
 
   DEBUG ((
     DEBUG_ERROR,

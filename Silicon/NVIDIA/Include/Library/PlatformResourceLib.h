@@ -25,22 +25,29 @@
 
 #define BIT(x)  (1 << (x))
 
-#define MAX_EEPROM_DATA_SIZE          256
-#define TEGRABL_VARIABLE_IMAGE_INDEX  (25U)
-#define TEGRABL_FTW_IMAGE_INDEX       (26U)
-#define TEGRABL_RAS_ERROR_LOGS        (24U)
-#define TEGRABL_EARLY_BOOT_VARS       (16U)
-#define TEGRABL_CMET                  (17U)
-#define TEGRABL_OEM                   (28U)
-#define TEGRABL_ERST                  (29U)
-#define TEGRAUEFI_CAPSULE             64
-#define DEVICE_CS_MASK                (0xFF00)
-#define DEVICE_CS_SHIFT               (8)
-#define MAX_SUPPORTED_CORES           1024U
-#define MAX_SUPPORTED_SOCKETS         4
-#define MAX_SUPPORTED_PG_PER_SOCKET   25
-#define MAX_SUPPORTED_PG              (MAX_SUPPORTED_SOCKETS * MAX_SUPPORTED_PG_PER_SOCKET)
-#define UID_NUM_DWORDS                4
+#define MAX_EEPROM_DATA_SIZE                 256
+#define TEGRABL_VARIABLE_IMAGE_INDEX         (25U)
+#define TEGRABL_FTW_IMAGE_INDEX              (26U)
+#define TEGRABL_RAS_ERROR_LOGS               (24U)
+#define TEGRABL_EARLY_BOOT_VARS              (16U)
+#define TEGRABL_CMET                         (17U)
+#define TEGRABL_OEM                          (28U)
+#define TEGRABL_ERST                         (29U)
+#define TEGRAUEFI_CAPSULE                    64
+#define DEVICE_CS_MASK                       (0xFF00)
+#define DEVICE_CS_SHIFT                      (8)
+#define MAX_SUPPORTED_CORES                  1024U
+#define MAX_SUPPORTED_SOCKETS                4
+#define MAX_SUPPORTED_PG_PER_SOCKET          25
+#define MAX_SUPPORTED_PG                     (MAX_SUPPORTED_SOCKETS * MAX_SUPPORTED_PG_PER_SOCKET)
+#define UID_NUM_DWORDS                       4
+#define UEFI_VAR_PARTITION_NAME              "uefi_var"
+#define UEFI_FTW_PARTITION_NAME              "uefi_ftw"
+#define UEFI_RAS_ERROR_LOGS_PARTITION_NAME   "ras_logs"
+#define UEFI_EARLY_BOOT_VARS_PARTITION_NAME  "early_uefi_var"
+#define UEFI_CMET_PARTITION_NAME             "cmet"
+#define UEFI_OEM_PARTITION_NAME              "oem"
+#define UEFI_ERST_PARTITION_NAME             "erst"
 
 typedef enum {
   TegrablBootInvalid,
