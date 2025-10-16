@@ -23,6 +23,7 @@
 
 **/
 
+#include "Base.h"
 #include <PiMm.h>
 
 #include <PiPei.h>
@@ -49,9 +50,11 @@
 #include <Protocol/PiMmCpuDriverEp.h>
 #include <Protocol/MmCommunication.h>
 
+#include "FdtBoot.h"
+
 extern EFI_MM_SYSTEM_TABLE  gMmCoreMmst;
 
-VOID  *gHobList = NULL;
+extern VOID  *gHobList;
 
 STATIC MISC_MM_COMMUNICATE_BUFFER  *mMiscMmCommunicateBuffer = NULL;
 STATIC EFI_MMRAM_DESCRIPTOR        *mNsCommBuffer            = NULL;
@@ -1027,35 +1030,54 @@ CEntryPoint (
   EFI_CONFIGURATION_TABLE             *ConfigurationTable;
   UINTN                               Idx;
   EFI_MMRAM_HOB_DESCRIPTOR_BLOCK      *MmramRangesHob;
+  UINTN                               FvBase;
+  VOID                                *DTBAddress;
+  UINT64                              TotalSPMemorySize;
 
   CpuDriverEntryPoint = NULL;
 
+  DEBUG ((DEBUG_ERROR, "CEntryPoint Arg0: %lx\n", (unsigned long)Arg0));
+  DEBUG ((DEBUG_ERROR, "CEntryPoint Arg1: %lx\n", (unsigned long)Arg1));
+  DEBUG ((DEBUG_ERROR, "CEntryPoint Arg2: %lx\n", (unsigned long)Arg2));
+  DEBUG ((DEBUG_ERROR, "CEntryPoint Arg3: %lx\n", (unsigned long)Arg3));
   Status = GetCommProtocol (&CommProtocol);
   if (EFI_ERROR (Status)) {
     goto finish;
   }
 
-  HobStart = GetPhitHobFromBootInfo (CommProtocol, Arg0, Arg1, Arg2, Arg3);
-  if (HobStart == NULL) {
-    Status = EFI_UNSUPPORTED;
-    goto finish;
-  }
+  if (Arg1 == 0) {
+    HobStart = GetPhitHobFromBootInfo (CommProtocol, Arg0, Arg1, Arg2, Arg3);
+    if (HobStart == NULL) {
+      Status = EFI_UNSUPPORTED;
+      goto finish;
+    }
 
-  DEBUG ((DEBUG_INFO, "Start Dump Hob: %lx\n", (unsigned long)HobStart));
-  DumpPhitHob (HobStart);
-  DEBUG ((DEBUG_INFO, "End Dump Hob: %lx\n", (unsigned long)HobStart));
+    DEBUG ((DEBUG_INFO, "Start Dump Hob: %lx\n", (unsigned long)HobStart));
+    DumpPhitHob (HobStart);
+    DEBUG ((DEBUG_INFO, "End Dump Hob: %lx\n", (unsigned long)HobStart));
 
-  FvHob = GetNextHob (EFI_HOB_TYPE_FV, HobStart);
-  if (FvHob == NULL) {
-    DEBUG ((DEBUG_ERROR, "Error: No Firmware Volume Hob is present.\n"));
-    Status = EFI_INVALID_PARAMETER;
+    FvHob = GetNextHob (EFI_HOB_TYPE_FV, HobStart);
+    if (FvHob == NULL) {
+      DEBUG ((DEBUG_ERROR, "Error: No Firmware Volume Hob is present.\n"));
+      Status = EFI_INVALID_PARAMETER;
+      goto finish;
+    }
 
-    goto finish;
+    FvBase = FvHob->BaseAddress;
+  } else {
+    DTBAddress = (VOID *)Arg1;
+    if (DTBAddress == NULL) {
+      DEBUG ((DEBUG_ERROR, "%a: DTBAddress is NULL\r\n", __FUNCTION__));
+      Status = EFI_INVALID_PARAMETER;
+      goto finish;
+    }
+
+    FvBase = GetSpImageBase (DTBAddress);
   }
 
   // Locate PE/COFF File information for the Standalone MM core module
   Status = LocateStandaloneMmCorePeCoffData (
-             (EFI_FIRMWARE_VOLUME_HEADER *)(UINTN)FvHob->BaseAddress,
+             (EFI_FIRMWARE_VOLUME_HEADER *)(UINTN)FvBase,
              &TeData,
              &TeDataSize
              );
@@ -1111,10 +1133,20 @@ CEntryPoint (
     ASSERT_EFI_ERROR (Status);
   }
 
+  if (Arg1 != 0) {
+    TotalSPMemorySize = Arg0;
+    HobStart          = CreateHobListFromBootInfo (TotalSPMemorySize, DTBAddress);
+    if (HobStart == NULL) {
+      Status = EFI_UNSUPPORTED;
+      goto finish;
+    }
+  }
+
   // Set the gHobList to point to the HOB list passed by TF-A.
   // This will be used by StandaloneMmCoreHobLib in early stage.
   gHobList = HobStart;
 
+  DEBUG ((DEBUG_ERROR, "HobStart: %lx\n", (unsigned long)HobStart));
   //
   // Call the MM Core entry point
   //

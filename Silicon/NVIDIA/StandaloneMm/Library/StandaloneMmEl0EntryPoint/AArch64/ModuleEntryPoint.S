@@ -24,6 +24,8 @@
 #include <IndustryStandard/ArmFfaSvc.h>
 #include <Uefi/UefiBaseType.h>
 
+#define DTB_MAGIC             0xEDFE0DD0
+
 .data
 .section .data.stmm_stack, "aw"
 .align 12
@@ -176,15 +178,48 @@ ASM_FUNC(SetStackPermissionSpmMm)
   ret
 
 //
+// Search for the DTB in memory.
+// The DTB is located before code, search for it by scanning memory
+// and searching for the device tree header magic.
+// UINTN
+// SearchDTB (
+//   IN UINTN LoadAddress
+//   )
+// Returns:
+//   x0: address of the DTB Blob.
+//     : On failure we get stuck in an infinite loop.
+ASM_FUNC(SearchDTB)
+  MOV32 (x27, DTB_MAGIC)
+_SearchDTB:
+  sub x0, x0, #4
+  ldr w2, [x0]
+  cmp x2, x27
+  bne _SearchDTB
+
+  ret
+
+//
 // Entry point of StandaloneMm
 //
 ASM_FUNC(_ModuleEntryPoint)
+  adr x29, .
   // Stash boot information registers from the SPMC
   mov x19, x0
   mov x20, x1
   mov x21, x2
   mov x22, x3
   mov x23, x4
+
+  MOV32 (x8, FixedPcdGet32 (PcdFdtBoot))
+  cmp x8, #0x01
+  b.eq .Lfdt_boot
+  mov x29, #0x00
+  b.ne .Lno_fdt_boot
+.Lfdt_boot:
+  mov x0, x29
+  bl SearchDTB
+  mov x29, x0
+.Lno_fdt_boot:
 
   bl CheckFfaSupport
   mov x1, x0
@@ -206,6 +241,20 @@ ASM_FUNC(_ModuleEntryPoint)
 
   mov sp, x0
 
+  cmp x29, #0x00
+  b.eq .Lffa_boot
+  b.ne .Ldtb
+.Ldtb:
+  mov x0, x19
+  mov x1, x29
+  mov x19, xzr
+  mov x20, xzr
+  mov x21, xzr
+  mov x22, xzr
+  mov x23, xzr
+  b CEntryPoint
+
+.Lffa_boot:
   // Restore boot information registers from the SPMC
   mov x0, x19
   mov x1, x20

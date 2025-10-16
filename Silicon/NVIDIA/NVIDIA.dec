@@ -223,6 +223,10 @@
   gNVIDIAMmRasResetReqGuid                        = { 0x6a0d9b18, 0x3bb7, 0x45c8, { 0xa3, 0xcd, 0x57, 0x01, 0x05, 0x11, 0xf9, 0xf0 } }
   # Namespace GUID used for UUID generation from serial number
   gNVIDIASerialNumberNamespaceGuid = { 0x765695f0, 0x9c75, 0x4670, { 0xad, 0x57, 0x6d, 0x3a, 0xf4, 0xd1, 0x88, 0x03 } }
+  # New Guids for StandaloneMm
+  gArmStandaloneMmPlatformInfoGuid  = { 0x919758f1, 0x6c16, 0x4419, { 0xbc, 0x02, 0xee, 0x78, 0x59, 0x5b, 0x12, 0x37 } }
+
+  gArmStandaloneMmDeviceMemoryRegions = { 0x25163605, 0x3d57, 0x43c7, { 0x8a, 0x1a, 0xd1, 0x42, 0xc9, 0x41, 0x14, 0xfb } }
 
   # GUID used to send SMBIOS Type17 Data to RASFW via FF-A message.
   gNVIDIARasSmbiosMsgGuid                               = { 0x64086D26, 0xB096, 0x42D7, { 0xB5, 0x93, 0x36, 0x1A, 0xAC, 0x4E, 0x74, 0x93 } }
@@ -554,6 +558,11 @@
 # factory-programmed lock state. When FALSE, the scratch register is ignored
 # and AvbApplyFactoryUnlockReset / its helpers are not compiled in.
   gNVIDIATokenSpaceGuid.PcdAvbEnableFactoryUnlockReset|FALSE|BOOLEAN|0x000000B6
+
+#
+# Are we following FFA-BootSpec v1.2 (HOB based)
+#
+  gNVIDIATokenSpaceGuid.PcdFdtBoot|0x1|UINT32|0x00000177
 
 [PcdsFeatureFlag]
 #OPTEE presence

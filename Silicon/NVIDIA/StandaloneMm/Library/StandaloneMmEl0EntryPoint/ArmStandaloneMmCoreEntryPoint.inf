@@ -13,7 +13,7 @@
 [Defines]
   INF_VERSION                    = 0x0001001A
   BASE_NAME                      = ArmStandaloneMmCoreEntryPoint
-  FILE_GUID                      = 16d7b2e4-a025-11ef-8931-6b032fa329a6
+  FILE_GUID                      = 336c356-77ac-4af5-8e7e-e1845c364981
   MODULE_TYPE                    = MM_CORE_STANDALONE
   VERSION_STRING                 = 1.0
   PI_SPECIFICATION_VERSION       = 0x00010032
@@ -26,6 +26,7 @@
 [Sources]
   ArmStandaloneMmCoreEntryPoint.c
   SetPermissions.c
+  FdtBoot.c
 
 [Sources.AARCH64]
   AArch64/ModuleEntryPoint.S
@@ -41,6 +42,7 @@
 
 [Packages]
   ArmPkg/ArmPkg.dec
+  Silicon/NVIDIA/NVIDIA.dec
 
 [LibraryClasses]
   BaseLib
@@ -50,12 +52,16 @@
   ArmTransferListLib
   ArmFfaLib
   StackCheckLib
+  FdtLib
+  StandaloneMmMmuLib
 
 [Guids]
   gMpInformationHobGuid
   gEfiMmPeiMmramMemoryReserveGuid
   gEfiStandaloneMmNonSecureBufferGuid
   gEfiHobListGuid
+  gArmStandaloneMmDeviceMemoryRegions
+  gArmStandaloneMmPlatformInfoGuid
 
 [Protocols]
   gEdkiiPiMmCpuDriverEpProtocolGuid
@@ -63,6 +69,7 @@
 
 [Pcd]
   gArmTokenSpaceGuid.PcdStMmStackSize
+  gNVIDIATokenSpaceGuid.PcdFdtBoot
 
 #
 # This configuration fails for CLANGPDB, which does not support PIE in the GCC
