@@ -2,7 +2,7 @@
 
   Arm SBMR Status code Driver
 
-  Copyright (c) 2022-2023, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+  SPDX-FileCopyrightText: Copyright (c) 2022-2025, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 
   SPDX-License-Identifier: BSD-2-Clause-Patent
 
@@ -40,9 +40,10 @@ typedef struct {
 // Denylist overly-verbose codes
 //
 STATUS_CODE_DENYLIST_TABLE  mStatusCodeDenyList[] = {
-  { EFI_PROGRESS_CODE, (EFI_SOFTWARE_DXE_CORE | EFI_SW_PC_INIT_BEGIN) },
-  { EFI_PROGRESS_CODE, (EFI_SOFTWARE_DXE_CORE | EFI_SW_PC_INIT_END)   },
-  { EFI_PROGRESS_CODE, (EFI_IO_BUS_PCI | EFI_P_PC_ENABLE)             },
+  { EFI_PROGRESS_CODE, (EFI_SOFTWARE_DXE_CORE | EFI_SW_PC_INIT_BEGIN)    },
+  { EFI_PROGRESS_CODE, (EFI_SOFTWARE_DXE_CORE | EFI_SW_PC_INIT_END)      },
+  { EFI_PROGRESS_CODE, (EFI_IO_BUS_PCI | EFI_P_PC_ENABLE)                },
+  { EFI_DEBUG_CODE,    (EFI_SOFTWARE_DXE_BS_DRIVER | EFI_DC_UNSPECIFIED) }
 };
 
 STATIC
