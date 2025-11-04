@@ -72,16 +72,15 @@ GpioBootCompleteDxeInitialize (
   IN EFI_SYSTEM_TABLE  *SystemTable
   )
 {
-  EFI_STATUS          Status;
-  UINT32              NumGpioBootCompleteNodes;
-  UINT32              GpioBootCompleteHandle;
-  VOID                *Dtb;
-  INT32               NodeOffset;
-  CONST VOID          *Property;
-  CONST UINT32        *Data;
-  UINT32              GpioControllerPhandle;
-  UINT32              GpioNum;
-  EMBEDDED_GPIO_MODE  GpioMode;
+  EFI_STATUS    Status;
+  UINT32        NumGpioBootCompleteNodes;
+  UINT32        GpioBootCompleteHandle;
+  VOID          *Dtb;
+  INT32         NodeOffset;
+  CONST VOID    *Property;
+  CONST UINT32  *Data;
+  UINT32        GpioControllerPhandle;
+  UINT32        GpioNum;
 
   DEBUG ((DEBUG_INFO, "%a: Initializing GPIO Boot Complete driver\n", __FUNCTION__));
 
@@ -127,18 +126,6 @@ GpioBootCompleteDxeInitialize (
 
   // Create GPIO pin identifier
   mGpioPin = GPIO (GpioControllerPhandle, GpioNum);
-
-  // Verify GPIO mode
-  Status = mGpio->GetMode (mGpio, mGpioPin, &GpioMode);
-  if (EFI_ERROR (Status)) {
-    DEBUG ((DEBUG_ERROR, "%a: Failed to get mode of boot complete gpio. Status = %r\n", __FUNCTION__, Status));
-    return Status;
-  }
-
-  if (GpioMode != GPIO_MODE_OUTPUT_0) {
-    DEBUG ((DEBUG_ERROR, "%a: Boot Complete GPIO mode not configured correctly: %d\n", __FUNCTION__, GpioMode));
-    return EFI_DEVICE_ERROR;
-  }
 
   // Create ReadyToBoot event
   Status = gBS->CreateEventEx (
