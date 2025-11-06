@@ -525,6 +525,10 @@ GeneratePciSlots (
 
       if (SegmentNumber != PciInfo->PciSegmentGroupNumber) {
         continue;
+      } else {
+        if ((BusNumber < PciInfo->StartBusNumber) || (BusNumber > PciInfo->EndBusNumber)) {
+          continue;
+        }
       }
 
       Status = gBS->HandleProtocol (
