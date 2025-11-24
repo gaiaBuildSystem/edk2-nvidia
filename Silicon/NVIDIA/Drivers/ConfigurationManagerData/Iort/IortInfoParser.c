@@ -1328,6 +1328,12 @@ SetupIortNodeForPciRc (
   Status = DeviceTreeGetNodeProperty (PropNode->NodeOffset, "ats-supported", NULL, NULL);
   if (!EFI_ERROR (Status)) {
     IortNode->AtsAttribute = EFI_ACPI_IORT_ROOT_COMPLEX_ATS_SUPPORTED;
+    Status                 = DeviceTreeGetNodeProperty (PropNode->NodeOffset, "pri-supported", NULL, NULL);
+    if (!EFI_ERROR (Status)) {
+      IortNode->AtsAttribute |= EFI_ACPI_IORT_ROOT_COMPLEX_PRI_SUPPORTED;
+    } else {
+      IortNode->AtsAttribute |= EFI_ACPI_IORT_ROOT_COMPLEX_PRI_UNSUPPORTED;
+    }
   } else {
     IortNode->AtsAttribute = EFI_ACPI_IORT_ROOT_COMPLEX_ATS_UNSUPPORTED;
   }
