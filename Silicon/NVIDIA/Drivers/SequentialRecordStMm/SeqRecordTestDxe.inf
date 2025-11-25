@@ -1,0 +1,42 @@
+#/** @file
+#
+#  SPDX-FileCopyrightText: Copyright (c) 2021-2025, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+#
+#  SPDX-License-Identifier: BSD-2-Clause-Patent
+#
+#**/
+
+[Defines]
+  INF_VERSION                    = 0x0001001A
+  BASE_NAME                      = SeqRecordTestDxe.inf
+  FILE_GUID                      = 419962b7-177a-4ff3-95e3-a2a467038f63
+  MODULE_TYPE                    = DXE_DRIVER
+  VERSION_STRING                 = 1.0
+  ENTRY_POINT                    = SeqRecordTestDxeEntryPoint
+
+[Sources.Common]
+  SeqRecordTestDxe.c
+
+[Packages]
+  ArmPkg/ArmPkg.dec
+  MdePkg/MdePkg.dec
+  MdeModulePkg/MdeModulePkg.dec
+  Silicon/NVIDIA/NVIDIA.dec
+
+[LibraryClasses]
+  UefiDriverEntryPoint
+  UefiLib
+  DxeServicesTableLib
+  PcdLib
+
+[Protocols]
+  gEfiMmCommunication2ProtocolGuid
+
+[Guids]
+  gNVIDIAMmMb1RecordGuid
+
+[Pcd]
+
+[Depex]
+  gEfiMmCommunication2ProtocolGuid
+
