@@ -46,6 +46,7 @@
   CapsuleLib
   DebugLib
   DevicePathLib
+  DeviceTreeHelperLib
   DxeServicesLib
   DxeServicesTableLib
   HobLib

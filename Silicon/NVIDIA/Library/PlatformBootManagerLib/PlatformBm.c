@@ -16,6 +16,7 @@
 #include <Library/CapsuleLib.h>
 #include <Library/DebugLib.h>
 #include <Library/DevicePathLib.h>
+#include <Library/DeviceTreeHelperLib.h>
 #include <Library/DxeServicesLib.h>
 #include <Library/DxeServicesTableLib.h>
 #include <Library/HobLib.h>
@@ -107,6 +108,28 @@ STATIC PLATFORM_USB_KEYBOARD  mUsbKeyboard = {
 
 STATIC PLATFORM_CONFIGURATION_DATA  CurrentPlatformConfigData;
 EFI_RSC_HANDLER_PROTOCOL            *mRscHandler = NULL;
+
+//
+// Dynamic list of VID/DID pairs loaded from DTB for which option ROM should be disabled.
+// DTB property: /firmware/uefi/oprom-disabled-devices
+// Format: array of u32 values where each entry is (VendorId << 16) | DeviceId
+//
+typedef struct {
+  UINT16    VendorId;
+  UINT16    DeviceId;
+} OPROM_DISABLED_DEVICE;
+
+STATIC OPROM_DISABLED_DEVICE  *mOpRomDisabledDevices    = NULL;
+STATIC UINTN                  mOpRomDisabledDeviceCount = 0;
+STATIC BOOLEAN                mOpRomDisabledListLoaded  = FALSE;
+
+//
+// Per-device OpROM enable override via UEFI variable.
+// Variable name format: "OpRomEnable_VVVV_DDDD" where VVVV=VendorId, DDDD=DeviceId (hex)
+// Example: "OpRomEnable_10DE_1234" for NVIDIA device 0x1234
+// Variable value: UINT8 (0 = disabled/use DTB default, non-zero = enabled by user)
+//
+#define OPROM_ENABLE_VAR_NAME_MAX_LEN  24
 
 /**
   Check if the handle satisfies a particular condition.
@@ -1539,6 +1562,276 @@ PciOpRomDisabled (
 }
 
 /**
+  Build the UEFI variable name for a specific VID/DID OpROM enable override.
+
+  @param[in]  VendorId    PCI Vendor ID
+  @param[in]  DeviceId    PCI Device ID
+  @param[out] VarName     Buffer to receive variable name (must be at least
+                          OPROM_ENABLE_VAR_NAME_MAX_LEN chars)
+**/
+STATIC
+VOID
+BuildOpRomEnableVarName (
+  IN  UINT16  VendorId,
+  IN  UINT16  DeviceId,
+  OUT CHAR16  *VarName
+  )
+{
+  UnicodeSPrint (
+    VarName,
+    OPROM_ENABLE_VAR_NAME_MAX_LEN * sizeof (CHAR16),
+    L"OpRomEnable_%04X_%04X",
+    VendorId,
+    DeviceId
+    );
+}
+
+/**
+  Check if user has enabled OpROM for this specific device via UEFI variable.
+
+  Each device in the DTB disabled list can be individually re-enabled by the user
+  through a per-device UEFI variable. This allows runtime override of DTB defaults.
+
+  @param[in] VendorId    PCI Vendor ID
+  @param[in] DeviceId    PCI Device ID
+
+  @retval TRUE   User has explicitly enabled OpROM for this device
+  @retval FALSE  No override exists (use DTB default to disable)
+**/
+STATIC
+BOOLEAN
+IsOpRomUserEnabled (
+  IN UINT16  VendorId,
+  IN UINT16  DeviceId
+  )
+{
+  EFI_STATUS  Status;
+  CHAR16      VarName[OPROM_ENABLE_VAR_NAME_MAX_LEN];
+  UINT8       Enabled;
+  UINTN       DataSize;
+
+  BuildOpRomEnableVarName (VendorId, DeviceId, VarName);
+
+  DataSize = sizeof (Enabled);
+  Status   = gRT->GetVariable (
+                    VarName,
+                    &gNVIDIAPublicVariableGuid,
+                    NULL,
+                    &DataSize,
+                    &Enabled
+                    );
+
+  if (EFI_ERROR (Status)) {
+    return FALSE;  // Variable doesn't exist - no override
+  }
+
+  return (Enabled != 0);
+}
+
+/**
+  Initialize the option ROM disabled device list from DTB.
+
+  Reads the "oprom-disabled-devices" property from /firmware/uefi node.
+  The property format is an array of u32 values where each entry is:
+    (VendorId << 16) | DeviceId
+
+  Example DTB entry:
+    oprom-disabled-devices = <0x10de1234 0x80865678>;
+
+  This function is called lazily on first use.
+**/
+STATIC
+VOID
+InitOpRomDisabledDeviceList (
+  VOID
+  )
+{
+  EFI_STATUS    Status;
+  INT32         NodeOffset;
+  CONST VOID    *Property;
+  UINT32        PropertySize;
+  CONST UINT32  *DeviceList;
+  UINTN         DeviceCount;
+  UINTN         Index;
+
+  //
+  // Only load once
+  //
+  if (mOpRomDisabledListLoaded) {
+    return;
+  }
+
+  Status = DeviceTreeGetNodeByPath ("/firmware/uefi", &NodeOffset);
+  if (EFI_ERROR (Status)) {
+    DEBUG ((DEBUG_VERBOSE, "%a: /firmware/uefi node not found\n", __FUNCTION__));
+    mOpRomDisabledListLoaded = TRUE;  // Config issue, no retry needed
+    return;
+  }
+
+  Status = DeviceTreeGetNodeProperty (
+             NodeOffset,
+             "oprom-disabled-devices",
+             &Property,
+             &PropertySize
+             );
+  if (EFI_ERROR (Status) || (Property == NULL) || (PropertySize == 0)) {
+    DEBUG ((DEBUG_VERBOSE, "%a: oprom-disabled-devices property not found\n", __FUNCTION__));
+    mOpRomDisabledListLoaded = TRUE;  // Config issue, no retry needed
+    return;
+  }
+
+  //
+  // Each entry is a u32 (4 bytes): (VID << 16) | DID
+  //
+  if ((PropertySize % sizeof (UINT32)) != 0) {
+    DEBUG ((DEBUG_ERROR, "%a: Invalid property size %u\n", __FUNCTION__, PropertySize));
+    mOpRomDisabledListLoaded = TRUE;  // Config error, no retry needed
+    return;
+  }
+
+  DeviceCount = PropertySize / sizeof (UINT32);
+  DeviceList  = (CONST UINT32 *)Property;
+
+  mOpRomDisabledDevices = AllocateZeroPool (DeviceCount * sizeof (OPROM_DISABLED_DEVICE));
+  if (mOpRomDisabledDevices == NULL) {
+    DEBUG ((DEBUG_ERROR, "%a: Failed to allocate memory, will retry\n", __FUNCTION__));
+    return;  // Transient failure, allow retry
+  }
+
+  for (Index = 0; Index < DeviceCount; Index++) {
+    //
+    // DTB stores in big-endian, need to swap
+    //
+    UINT32  Value = SwapBytes32 (DeviceList[Index]);
+    mOpRomDisabledDevices[Index].VendorId = (UINT16)(Value >> 16);
+    mOpRomDisabledDevices[Index].DeviceId = (UINT16)(Value & 0xFFFF);
+
+    DEBUG ((
+      DEBUG_INFO,
+      "%a: Loaded VID:0x%04x DID:0x%04x for option ROM disable\n",
+      __FUNCTION__,
+      mOpRomDisabledDevices[Index].VendorId,
+      mOpRomDisabledDevices[Index].DeviceId
+      ));
+  }
+
+  mOpRomDisabledDeviceCount = DeviceCount;
+  mOpRomDisabledListLoaded  = TRUE;  // Successfully loaded
+
+  DEBUG ((
+    DEBUG_INFO,
+    "%a: Loaded %u devices from DTB for option ROM disable\n",
+    __FUNCTION__,
+    mOpRomDisabledDeviceCount
+    ));
+}
+
+/**
+  Checks if the option ROM for a PCI device should be disabled based on VID/DID.
+
+  The VID/DID list is loaded from DTB property /firmware/uefi/oprom-disabled-devices.
+
+  @param[in] DevicePath   Device path of the image being checked.
+
+  @retval    TRUE         The option ROM for this device should be disabled.
+  @retval    FALSE        Other cases
+**/
+BOOLEAN
+PciOpRomDisabledByVidDid (
+  IN EFI_DEVICE_PATH_PROTOCOL  *DevicePath
+  )
+{
+  EFI_STATUS           Status;
+  EFI_PCI_IO_PROTOCOL  *PciIo;
+  EFI_HANDLE           Handle;
+  UINT16               VendorId;
+  UINT16               DeviceId;
+  UINTN                Index;
+  CHAR16               *DevicePathText;
+
+  //
+  // Ensure the list is initialized from DTB
+  //
+  InitOpRomDisabledDeviceList ();
+
+  //
+  // If no devices in list, nothing to disable
+  //
+  if ((mOpRomDisabledDevices == NULL) || (mOpRomDisabledDeviceCount == 0)) {
+    return FALSE;
+  }
+
+  Status = gBS->LocateDevicePath (&gEfiPciIoProtocolGuid, &DevicePath, &Handle);
+  if (EFI_ERROR (Status) || (Handle == NULL)) {
+    return FALSE;
+  }
+
+  Status = gBS->HandleProtocol (Handle, &gEfiPciIoProtocolGuid, (VOID **)&PciIo);
+  if (EFI_ERROR (Status) || (PciIo == NULL)) {
+    return FALSE;
+  }
+
+  //
+  // Read Vendor ID and Device ID from PCI config space
+  //
+  Status = PciIo->Pci.Read (PciIo, EfiPciIoWidthUint16, PCI_VENDOR_ID_OFFSET, 1, &VendorId);
+  if (EFI_ERROR (Status)) {
+    return FALSE;
+  }
+
+  Status = PciIo->Pci.Read (PciIo, EfiPciIoWidthUint16, PCI_DEVICE_ID_OFFSET, 1, &DeviceId);
+  if (EFI_ERROR (Status)) {
+    return FALSE;
+  }
+
+  //
+  // Check if VID/DID is in the disabled list
+  //
+  for (Index = 0; Index < mOpRomDisabledDeviceCount; Index++) {
+    if ((mOpRomDisabledDevices[Index].VendorId == VendorId) &&
+        (mOpRomDisabledDevices[Index].DeviceId == DeviceId))
+    {
+      //
+      // Device is in DTB disabled list - check for user override
+      //
+      if (IsOpRomUserEnabled (VendorId, DeviceId)) {
+        DevicePathText = ConvertDevicePathToText (DevicePath, FALSE, FALSE);
+        DEBUG ((
+          DEBUG_INFO,
+          "%a: User override - ALLOWING OpROM for VID:0x%04x DID:0x%04x - %s\n",
+          __FUNCTION__,
+          VendorId,
+          DeviceId,
+          DevicePathText != NULL ? DevicePathText : L"<unknown>"
+          ));
+        if (DevicePathText != NULL) {
+          FreePool (DevicePathText);
+        }
+
+        return FALSE;  // User override - allow OpROM
+      }
+
+      DevicePathText = ConvertDevicePathToText (DevicePath, FALSE, FALSE);
+      if (DevicePathText != NULL) {
+        DEBUG ((
+          DEBUG_INFO,
+          "%a: Skip Loading Option ROM for VID:0x%04x DID:0x%04x - %s\n",
+          __FUNCTION__,
+          VendorId,
+          DeviceId,
+          DevicePathText
+          ));
+        FreePool (DevicePathText);
+      }
+
+      return TRUE;
+    }
+  }
+
+  return FALSE;
+}
+
+/**
   This function is copied from EfiBootManagerDispatchDeferredImages. But instead of
   dispatching all the deferred images, it checks and only dispatches the images
   that are not specified as disabled.
@@ -1608,9 +1901,16 @@ VerifyAndDispatchDeferredImages (
       }
 
       //
-      // Skip loading option ROM if it is disabled
+      // Skip loading option ROM if it is disabled by segment
       //
       if (PciOpRomDisabled (ImageDevicePath)) {
+        continue;
+      }
+
+      //
+      // Skip loading option ROM if it is disabled by VID/DID
+      //
+      if (PciOpRomDisabledByVidDid (ImageDevicePath)) {
         continue;
       }
 
