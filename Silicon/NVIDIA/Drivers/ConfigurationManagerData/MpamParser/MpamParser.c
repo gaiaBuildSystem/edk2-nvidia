@@ -17,9 +17,14 @@
 
 #include <IndustryStandard/Mpam.h>
 
+typedef enum {
+  MpamResourceTypeCache,
+  MpamResourceTypeMemory
+} MPAM_RESOURCE_TYPE;
+
 EFI_STATUS
 EFIAPI
-UpdateMemoryResourceNodeInfo (
+UpdateResourceNodeInfo (
   IN  CONST HW_INFO_PARSER_HANDLE  ParserHandle
   )
 {
@@ -34,20 +39,30 @@ UpdateMemoryResourceNodeInfo (
   CM_OBJ_DESCRIPTOR          Desc;
   CM_OBJECT_TOKEN            *TokenMap;
   UINT32                     pHandle;
+  UINT32                     CacheId;
+  CONST CHAR8                *CompatArray[3];
+  MPAM_RESOURCE_TYPE         ResourceType;
 
   ResourceNodeInfo    = NULL;
   ResourceNodeHandles = NULL;
   TokenMap            = NULL;
   ResourceNodeCount   = 0;
+  ResourceType        = MpamResourceTypeCache;
+  CacheId             = 0;
 
-  // Get Resource node count from the device tree
-  Status = GetMatchingEnabledDeviceTreeNodes ("arm,mpam-memory", NULL, &ResourceNodeCount);
+  // Setup compatible array to search for both types together
+  CompatArray[0] = "arm,mpam-cache";
+  CompatArray[1] = "arm,mpam-memory";
+  CompatArray[2] = NULL;
+
+  // Get all MPAM resource node count (both cache and memory) in device tree order
+  Status = DeviceTreeGetCompatibleNodeCount (CompatArray, &ResourceNodeCount);
   if (Status == EFI_NOT_FOUND) {
-    DEBUG ((DEBUG_ERROR, "No Resource nodes found\r\n"));
+    DEBUG ((DEBUG_INFO, "%a: No MPAM Resource nodes found\r\n", __FUNCTION__));
     Status = EFI_SUCCESS;
     goto Exit;
-  } else if (Status != EFI_BUFFER_TOO_SMALL) {
-    Status = EFI_DEVICE_ERROR;
+  } else if (EFI_ERROR (Status)) {
+    DEBUG ((DEBUG_ERROR, "%a: DeviceTreeGetCompatibleNodeCount failed: %r\r\n", __FUNCTION__, Status));
     goto Exit;
   }
 
@@ -62,9 +77,49 @@ UpdateMemoryResourceNodeInfo (
     goto Exit;
   }
 
-  Status = GetMatchingEnabledDeviceTreeNodes ("arm,mpam-memory", ResourceNodeHandles, &ResourceNodeCount);
-  if (EFI_ERROR (Status)) {
-    goto Exit;
+  // Get all resource node handles (cache and memory) in device tree order
+  {
+    INT32   NodeOffset;
+    UINT32  Index;
+    VOID    *DeviceTreeBase;
+
+    NodeOffset = -1;
+    Index      = 0;
+
+    // Obtain pointer to the DeviceTreeBase
+    Status = GetDeviceTreePointer (&DeviceTreeBase, NULL);
+    if (EFI_ERROR (Status)) {
+      goto Exit;
+    }
+
+    while (Index < ResourceNodeCount) {
+      Status = DeviceTreeGetNextCompatibleNode (CompatArray, &NodeOffset);
+      if (Status == EFI_NOT_FOUND) {
+        break;
+      } else if (EFI_ERROR (Status)) {
+        DEBUG ((DEBUG_ERROR, "%a: DeviceTreeGetNextCompatibleNode failed: %r\r\n", __FUNCTION__, Status));
+        goto Exit;
+      }
+
+      Status = GetDeviceTreeHandle (DeviceTreeBase, NodeOffset, &ResourceNodeHandles[Index]);
+      if (EFI_ERROR (Status)) {
+        goto Exit;
+      }
+
+      Index++;
+    }
+
+    if (Index != ResourceNodeCount) {
+      DEBUG ((
+        DEBUG_ERROR,
+        "%a: Node count mismatch: expected %u, got %u\r\n",
+        __FUNCTION__,
+        ResourceNodeCount,
+        Index
+        ));
+      Status = EFI_DEVICE_ERROR;
+      goto Exit;
+    }
   }
 
   ResourceNodeInfo = (CM_ARM_RESOURCE_NODE_INFO *)AllocateZeroPool (sizeof (CM_ARM_RESOURCE_NODE_INFO) * ResourceNodeCount);
@@ -74,11 +129,10 @@ UpdateMemoryResourceNodeInfo (
     goto Exit;
   }
 
+  // Process all nodes in the order they were found (device tree order)
   for (Index = 0; Index < ResourceNodeCount; Index++) {
-    ResourceNodeInfo[Index].Token = TokenMap[Index];
-    // TODO: Assuming only one kind of resource per MSC node
-    ResourceNodeInfo[Index].RisIndex    = 0;
-    ResourceNodeInfo[Index].LocatorType = EFI_ACPI_MPAM_LOCATION_MEMORY;
+    ResourceNodeInfo[Index].Token    = TokenMap[Index];
+    ResourceNodeInfo[Index].RisIndex = 0;
 
     // Gather Locator info
     Status = GetDeviceTreeNode (ResourceNodeHandles[Index], &DeviceTreeBase, &NodeOffset);
@@ -89,21 +143,68 @@ UpdateMemoryResourceNodeInfo (
     // using pHandle as unique identifier
     pHandle                            = FdtGetPhandle (DeviceTreeBase, NodeOffset);
     ResourceNodeInfo[Index].Identifier = pHandle;
-    DEBUG ((DEBUG_INFO, "%a ResourceNodeInfo[%d].Identifier 0x%X\r\n", __FUNCTION__, Index, ResourceNodeInfo[Index].Identifier));
 
-    MpamProp = FdtGetProp (DeviceTreeBase, NodeOffset, "numa-node-id", NULL);
-    if (MpamProp == NULL) {
+    // Determine resource type by checking compatible property
+    if (!EFI_ERROR (DeviceTreeCheckNodeSingleCompatibility ("arm,mpam-cache", NodeOffset))) {
+      ResourceType = MpamResourceTypeCache;
+    } else if (!EFI_ERROR (DeviceTreeCheckNodeSingleCompatibility ("arm,mpam-memory", NodeOffset))) {
+      ResourceType = MpamResourceTypeMemory;
+    } else {
+      DEBUG ((DEBUG_ERROR, "%a: Unknown MPAM resource type at index %d\r\n", __FUNCTION__, Index));
       Status = EFI_DEVICE_ERROR;
       goto Exit;
     }
 
-    ResourceNodeInfo[Index].Locator.Descriptor1 = SwapBytes32 (*MpamProp);
     DEBUG ((
       DEBUG_INFO,
-      "%a: ResourceNodeInfo[Index].Locator.Descriptor1 pxm domain = %d\n",
+      "%a ResourceNodeInfo[%d].Identifier 0x%X (Type: %a)\r\n",
       __FUNCTION__,
-      ResourceNodeInfo[Index].Locator.Descriptor1
+      Index,
+      ResourceNodeInfo[Index].Identifier,
+      (ResourceType == MpamResourceTypeCache) ? "arm,mpam-cache" : "arm,mpam-memory"
       ));
+
+    // Type-specific processing
+    if (ResourceType == MpamResourceTypeCache) {
+      // MpamResourceTypeCache
+      ResourceNodeInfo[Index].LocatorType = EFI_ACPI_MPAM_LOCATION_PROCESSOR_CACHE;
+
+      MpamProp = FdtGetProp (DeviceTreeBase, NodeOffset, "arm,mpam-device", NULL);
+      if (MpamProp == NULL) {
+        DEBUG ((DEBUG_ERROR, "%a: Property arm,mpam-device not found\r\n", __FUNCTION__));
+        Status = EFI_DEVICE_ERROR;
+        goto Exit;
+      }
+
+      pHandle = SwapBytes32 (*MpamProp);
+
+      // Assign the locator to match the Cache ID assigned in the PPTT table
+      Status = NvFindCacheIdByPhandle (ParserHandle, pHandle, CACHE_TYPE_UNIFIED, &CacheId);
+      if (EFI_ERROR (Status)) {
+        goto Exit;
+      }
+
+      ResourceNodeInfo[Index].Locator.Descriptor1 = CacheId;
+    } else {
+      // MpamResourceTypeMemory
+      ResourceNodeInfo[Index].LocatorType = EFI_ACPI_MPAM_LOCATION_MEMORY;
+
+      MpamProp = FdtGetProp (DeviceTreeBase, NodeOffset, "numa-node-id", NULL);
+      if (MpamProp == NULL) {
+        DEBUG ((DEBUG_ERROR, "%a: Property numa-node-id not found\r\n", __FUNCTION__));
+        Status = EFI_DEVICE_ERROR;
+        goto Exit;
+      }
+
+      ResourceNodeInfo[Index].Locator.Descriptor1 = SwapBytes32 (*MpamProp);
+      DEBUG ((
+        DEBUG_INFO,
+        "%a: ResourceNodeInfo[%d].Locator.Descriptor1 pxm domain = %d\n",
+        __FUNCTION__,
+        Index,
+        ResourceNodeInfo[Index].Locator.Descriptor1
+        ));
+    }
 
     // TODO: Func Dependency List
     ResourceNodeInfo[Index].NumFuncDep = 0;
@@ -115,132 +216,15 @@ UpdateMemoryResourceNodeInfo (
   Desc.Count    = ResourceNodeCount;
   Desc.Data     = ResourceNodeInfo;
 
+  // Try to extend first, if not found then add as new
   Status = NvExtendCmObj (ParserHandle, &Desc, CM_NULL_TOKEN, NULL);
   if (Status == EFI_NOT_FOUND) {
-    // Not found, so attempt to add the provided data as a new object instead
-    Status = NvAddMultipleCmObjGetTokens (ParserHandle, &Desc, NULL, NULL);
+    Status = NvAddMultipleCmObjWithTokens (ParserHandle, &Desc, TokenMap, CM_NULL_TOKEN);
     if (EFI_ERROR (Status)) {
       goto Exit;
     }
   }
 
-  if (EFI_ERROR (Status)) {
-    DEBUG ((DEBUG_ERROR, "%a: Got %r trying to add ResourceNodes for MPAM\n", __FUNCTION__, Status));
-    goto Exit;
-  }
-
-Exit:
-  if (EFI_ERROR (Status)) {
-    FREE_NON_NULL (ResourceNodeInfo);
-  }
-
-  FREE_NON_NULL (ResourceNodeHandles);
-  FREE_NON_NULL (TokenMap);
-
-  return Status;
-}
-
-EFI_STATUS
-EFIAPI
-UpdateCacheResourceNodeInfo (
-  IN  CONST HW_INFO_PARSER_HANDLE  ParserHandle
-  )
-{
-  UINT32                     Index;
-  CM_ARM_RESOURCE_NODE_INFO  *ResourceNodeInfo;
-  UINT32                     ResourceNodeCount;
-  UINT32                     *ResourceNodeHandles;
-  VOID                       *DeviceTreeBase;
-  INT32                      NodeOffset;
-  UINT32                     pHandle;
-  CONST UINT32               *MpamProp;
-  EFI_STATUS                 Status;
-  CM_OBJ_DESCRIPTOR          Desc;
-  UINT32                     CacheId;
-  CM_OBJECT_TOKEN            *TokenMap;
-
-  ResourceNodeInfo    = NULL;
-  ResourceNodeHandles = NULL;
-  TokenMap            = NULL;
-  ResourceNodeCount   = 0;
-
-  // Get Resource node count from the device tree
-  Status = GetMatchingEnabledDeviceTreeNodes ("arm,mpam-cache", NULL, &ResourceNodeCount);
-  if (Status == EFI_NOT_FOUND) {
-    DEBUG ((DEBUG_ERROR, "No Resource nodes found\r\n"));
-    Status = EFI_SUCCESS;
-    goto Exit;
-  } else if (Status != EFI_BUFFER_TOO_SMALL) {
-    Status = EFI_DEVICE_ERROR;
-    goto Exit;
-  }
-
-  Status = NvAllocateCmTokens (ParserHandle, ResourceNodeCount, &TokenMap);
-  if (EFI_ERROR (Status)) {
-    goto Exit;
-  }
-
-  ResourceNodeHandles = (UINT32 *)AllocateZeroPool (sizeof (UINT32) * ResourceNodeCount);
-  if (ResourceNodeHandles == NULL) {
-    Status = EFI_OUT_OF_RESOURCES;
-    goto Exit;
-  }
-
-  Status = GetMatchingEnabledDeviceTreeNodes ("arm,mpam-cache", ResourceNodeHandles, &ResourceNodeCount);
-  if (EFI_ERROR (Status)) {
-    goto Exit;
-  }
-
-  ResourceNodeInfo = (CM_ARM_RESOURCE_NODE_INFO *)AllocateZeroPool (sizeof (CM_ARM_RESOURCE_NODE_INFO) * ResourceNodeCount);
-  if (ResourceNodeInfo == NULL) {
-    DEBUG ((DEBUG_ERROR, "%a: Failed to allocate for Resource Nodes\r\n", __FUNCTION__));
-    Status = EFI_OUT_OF_RESOURCES;
-    goto Exit;
-  }
-
-  for (Index = 0; Index < ResourceNodeCount; Index++) {
-    ResourceNodeInfo[Index].Token = TokenMap[Index];
-    // TODO: Assuming only one kind of resource per MSC node
-    ResourceNodeInfo[Index].RisIndex    = 0;
-    ResourceNodeInfo[Index].LocatorType = EFI_ACPI_MPAM_LOCATION_PROCESSOR_CACHE;
-
-    // Gather Locator info
-    Status = GetDeviceTreeNode (ResourceNodeHandles[Index], &DeviceTreeBase, &NodeOffset);
-    if (EFI_ERROR (Status)) {
-      goto Exit;
-    }
-
-    // using pHandle as unique identifier
-    pHandle                            = FdtGetPhandle (DeviceTreeBase, NodeOffset);
-    ResourceNodeInfo[Index].Identifier = pHandle;
-    DEBUG ((DEBUG_INFO, "%a ResourceNodeInfo[%d].Identifier 0x%X\r\n", __FUNCTION__, Index, ResourceNodeInfo[Index].Identifier));
-
-    MpamProp = FdtGetProp (DeviceTreeBase, NodeOffset, "arm,mpam-device", NULL);
-    if (MpamProp == NULL) {
-      Status = EFI_DEVICE_ERROR;
-      goto Exit;
-    }
-
-    pHandle = SwapBytes32 (*MpamProp);
-
-    // Assign the locator to match the Cache ID assigned in the PPTT table
-    Status = NvFindCacheIdByPhandle (ParserHandle, pHandle, CACHE_TYPE_UNIFIED, &CacheId);
-    if (EFI_ERROR (Status)) {
-      goto Exit;
-    }
-
-    ResourceNodeInfo[Index].Locator.Descriptor1 = CacheId;
-    // TODO: Func Dependency List
-    ResourceNodeInfo[Index].NumFuncDep = 0;
-  }
-
-  // Add Resource Nodes to repo
-  Desc.ObjectId = CREATE_CM_ARM_OBJECT_ID (EArmObjResNodeInfo);
-  Desc.Size     = sizeof (CM_ARM_RESOURCE_NODE_INFO) * ResourceNodeCount;
-  Desc.Count    = ResourceNodeCount;
-  Desc.Data     = ResourceNodeInfo;
-
-  Status = NvAddMultipleCmObjWithTokens (ParserHandle, &Desc, TokenMap, CM_NULL_TOKEN);
   if (EFI_ERROR (Status)) {
     DEBUG ((DEBUG_ERROR, "%a: Got %r trying to add ResourceNodes for MPAM\n", __FUNCTION__, Status));
     goto Exit;
@@ -529,12 +513,7 @@ MpamParser (
     return Status;
   }
 
-  Status = UpdateCacheResourceNodeInfo (ParserHandle);
-  if (EFI_ERROR (Status)) {
-    return Status;
-  }
-
-  Status = UpdateMemoryResourceNodeInfo (ParserHandle);
+  Status = UpdateResourceNodeInfo (ParserHandle);
   if (EFI_ERROR (Status)) {
     return Status;
   }
