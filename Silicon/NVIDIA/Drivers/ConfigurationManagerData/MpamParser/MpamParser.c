@@ -17,6 +17,37 @@
 
 #include <IndustryStandard/Mpam.h>
 
+/**
+  Check if a device tree node is disabled.
+
+  @param[in]  DeviceTreeBase  Pointer to the device tree.
+  @param[in]  NodeOffset      The node offset to check.
+
+  @retval TRUE   The node is disabled.
+  @retval FALSE  The node is enabled or status not specified.
+**/
+STATIC
+BOOLEAN
+IsNodeDisabled (
+  IN VOID   *DeviceTreeBase,
+  IN INT32  NodeOffset
+  )
+{
+  CONST CHAR8  *Status;
+  INT32        Length;
+
+  Status = FdtGetProp (DeviceTreeBase, NodeOffset, "status", &Length);
+  if ((Status != NULL) && (Length > 0)) {
+    if ((AsciiStrCmp (Status, "disabled") == 0) ||
+        (AsciiStrCmp (Status, "fail") == 0))
+    {
+      return TRUE;
+    }
+  }
+
+  return FALSE;
+}
+
 typedef enum {
   MpamResourceTypeCache,
   MpamResourceTypeMemory
@@ -130,9 +161,11 @@ UpdateResourceNodeInfo (
   }
 
   // Process all nodes in the order they were found (device tree order)
+  // ValidIndex tracks the actual number of valid (non-skipped) resource nodes
+  UINT32  ValidIndex = 0;
+
   for (Index = 0; Index < ResourceNodeCount; Index++) {
-    ResourceNodeInfo[Index].Token    = TokenMap[Index];
-    ResourceNodeInfo[Index].RisIndex = 0;
+    INT32  ParentNodeOffset;
 
     // Gather Locator info
     Status = GetDeviceTreeNode (ResourceNodeHandles[Index], &DeviceTreeBase, &NodeOffset);
@@ -140,9 +173,26 @@ UpdateResourceNodeInfo (
       goto Exit;
     }
 
-    // using pHandle as unique identifier
-    pHandle                            = FdtGetPhandle (DeviceTreeBase, NodeOffset);
-    ResourceNodeInfo[Index].Identifier = pHandle;
+    // Check if parent MSC node is disabled - skip this resource node if so
+    ParentNodeOffset = FdtParentOffset (DeviceTreeBase, NodeOffset);
+    if (ParentNodeOffset >= 0) {
+      if (IsNodeDisabled (DeviceTreeBase, ParentNodeOffset)) {
+        DEBUG ((
+          DEBUG_INFO,
+          "%a: Skipping resource node at index %d - parent MSC node is disabled\r\n",
+          __FUNCTION__,
+          Index
+          ));
+        continue;
+      }
+    }
+
+    ResourceNodeInfo[ValidIndex].Token    = TokenMap[ValidIndex];
+    ResourceNodeInfo[ValidIndex].RisIndex = 0;
+
+    // Using pHandle as unique identifier
+    pHandle                                 = FdtGetPhandle (DeviceTreeBase, NodeOffset);
+    ResourceNodeInfo[ValidIndex].Identifier = pHandle;
 
     // Determine resource type by checking compatible property
     if (!EFI_ERROR (DeviceTreeCheckNodeSingleCompatibility ("arm,mpam-cache", NodeOffset))) {
@@ -159,15 +209,15 @@ UpdateResourceNodeInfo (
       DEBUG_INFO,
       "%a ResourceNodeInfo[%d].Identifier 0x%X (Type: %a)\r\n",
       __FUNCTION__,
-      Index,
-      ResourceNodeInfo[Index].Identifier,
+      ValidIndex,
+      ResourceNodeInfo[ValidIndex].Identifier,
       (ResourceType == MpamResourceTypeCache) ? "arm,mpam-cache" : "arm,mpam-memory"
       ));
 
     // Type-specific processing
     if (ResourceType == MpamResourceTypeCache) {
       // MpamResourceTypeCache
-      ResourceNodeInfo[Index].LocatorType = EFI_ACPI_MPAM_LOCATION_PROCESSOR_CACHE;
+      ResourceNodeInfo[ValidIndex].LocatorType = EFI_ACPI_MPAM_LOCATION_PROCESSOR_CACHE;
 
       MpamProp = FdtGetProp (DeviceTreeBase, NodeOffset, "arm,mpam-device", NULL);
       if (MpamProp == NULL) {
@@ -184,10 +234,10 @@ UpdateResourceNodeInfo (
         goto Exit;
       }
 
-      ResourceNodeInfo[Index].Locator.Descriptor1 = CacheId;
+      ResourceNodeInfo[ValidIndex].Locator.Descriptor1 = CacheId;
     } else {
       // MpamResourceTypeMemory
-      ResourceNodeInfo[Index].LocatorType = EFI_ACPI_MPAM_LOCATION_MEMORY;
+      ResourceNodeInfo[ValidIndex].LocatorType = EFI_ACPI_MPAM_LOCATION_MEMORY;
 
       MpamProp = FdtGetProp (DeviceTreeBase, NodeOffset, "numa-node-id", NULL);
       if (MpamProp == NULL) {
@@ -196,24 +246,34 @@ UpdateResourceNodeInfo (
         goto Exit;
       }
 
-      ResourceNodeInfo[Index].Locator.Descriptor1 = SwapBytes32 (*MpamProp);
+      ResourceNodeInfo[ValidIndex].Locator.Descriptor1 = SwapBytes32 (*MpamProp);
       DEBUG ((
         DEBUG_INFO,
         "%a: ResourceNodeInfo[%d].Locator.Descriptor1 pxm domain = %d\n",
         __FUNCTION__,
-        Index,
-        ResourceNodeInfo[Index].Locator.Descriptor1
+        ValidIndex,
+        ResourceNodeInfo[ValidIndex].Locator.Descriptor1
         ));
     }
 
     // TODO: Func Dependency List
-    ResourceNodeInfo[Index].NumFuncDep = 0;
+    ResourceNodeInfo[ValidIndex].NumFuncDep = 0;
+
+    // Increment valid index only for nodes that were processed
+    ValidIndex++;
   }
 
-  // Extend the list with new Resource node objects
+  // If no valid resource nodes remain after filtering, skip adding to CM
+  if (ValidIndex == 0) {
+    DEBUG ((DEBUG_INFO, "%a: No valid resource nodes to add (all parents disabled)\r\n", __FUNCTION__));
+    Status = EFI_SUCCESS;
+    goto Exit;
+  }
+
+  // Extend the list with new Resource node objects (only valid ones)
   Desc.ObjectId = CREATE_CM_ARM_OBJECT_ID (EArmObjResNodeInfo);
-  Desc.Size     = sizeof (CM_ARM_RESOURCE_NODE_INFO) * ResourceNodeCount;
-  Desc.Count    = ResourceNodeCount;
+  Desc.Size     = sizeof (CM_ARM_RESOURCE_NODE_INFO) * ValidIndex;
+  Desc.Count    = ValidIndex;
   Desc.Data     = ResourceNodeInfo;
 
   // Try to extend first, if not found then add as new
