@@ -1,7 +1,7 @@
 ## @file
 #  Application to inject Error.
 #
-# SPDX-FileCopyrightText: Copyright (c) 2024, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2024-2025, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 #
 # SPDX-License-Identifier: BSD-2-Clause-Patent
 #
@@ -42,9 +42,12 @@
   ShellLib
 
 [Guids]
+  gNVIDIATestAssertMM
 
 [Protocols]
   gEfiHiiPackageListProtocolGuid                ##CONSUMES
+  gEfiMmCommunication2ProtocolGuid
+
 
 [UserExtensions.TianoCore."ExtraFiles"]
   TestInjectAssertExtra.uni

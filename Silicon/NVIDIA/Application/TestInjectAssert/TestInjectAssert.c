@@ -1,7 +1,7 @@
 /** @file
   TestInjectAssert
 
-  SPDX-FileCopyrightText: Copyright (c) 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+  SPDX-FileCopyrightText: Copyright (c) 2024-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 
   SPDX-License-Identifier: BSD-2-Clause-Patent
 
@@ -12,6 +12,7 @@
 #include <Library/ShellLib.h>
 #include <Library/DebugLib.h>
 #include <Library/MemoryAllocationLib.h>
+#include <Protocol/MmCommunication2.h>
 #include <Library/UefiBootServicesTableLib.h>
 #include <Library/UefiRuntimeServicesTableLib.h>
 #include <Library/PlatformResourceLib.h>
@@ -24,14 +25,65 @@
 // and to ensure user inputs are in valid format
 //
 SHELL_PARAM_ITEM  TestInjectAssertParamList[] = {
-  { L"--swassert",  TypeFlag },
-  { L"--exception", TypeFlag },
-  { L"-?",          TypeFlag },
-  { NULL,           TypeMax  },
+  { L"--swassert",    TypeFlag },
+  { L"--exception",   TypeFlag },
+  { L"--swassert_mm", TypeFlag },
+  { L"-?",            TypeFlag },
+  { NULL,             TypeMax  },
 };
+
+#define MM_TEST_PAYLOAD_SIZE  (64 + sizeof (EFI_MM_COMMUNICATE_HEADER))
 
 STATIC CHAR16          AppName[] = L"TestInjectAssert";
 STATIC EFI_HII_HANDLE  HiiHandle;
+STATIC UINT8           MmTestPayload[MM_TEST_PAYLOAD_SIZE];
+
+/**
+  This function is used to inject an assert in MM by sending a message
+  to an unregistered MMI.
+
+  @param[in] ImageHandle    The image handle of this application.
+  @param[in] SystemTable    The pointer to the EFI System Table.
+
+  @retval EFI_SUCCESS    The operation completed successfully.
+
+**/
+STATIC
+EFI_STATUS
+InjectAssertInMM (
+  IN EFI_HANDLE        ImageHandle,
+  IN EFI_SYSTEM_TABLE  *SystemTable
+  )
+{
+  EFI_STATUS                      Status;
+  EFI_MM_COMMUNICATION2_PROTOCOL  *MmCommProtocol;
+  EFI_MM_COMMUNICATE_HEADER       *Header;
+  UINTN                           DataSize;
+
+  Status = gBS->LocateProtocol (&gEfiMmCommunication2ProtocolGuid, NULL, (VOID **)&MmCommProtocol);
+  if (EFI_ERROR (Status)) {
+    ErrorPrint (L"%a: locate Mm communication 2 protocol failed: %r\n", __FUNCTION__, Status);
+    return Status;
+  }
+
+  Header = (EFI_MM_COMMUNICATE_HEADER *)MmTestPayload;
+  CopyGuid (&Header->HeaderGuid, &gNVIDIATestAssertMM);
+  Header->MessageLength = 64;
+  DataSize              = MM_TEST_PAYLOAD_SIZE;
+
+  Status = MmCommProtocol->Communicate (
+                             MmCommProtocol,
+                             MmTestPayload,
+                             MmTestPayload,
+                             &DataSize
+                             );
+  if (EFI_ERROR (Status)) {
+    ErrorPrint (L"%a: MM communicate failed: %r\n", __FUNCTION__, Status);
+    return Status;
+  }
+
+  return EFI_SUCCESS;
+}
 
 /**
   This is the declaration of an EFI image entry point. This entry point is
@@ -58,6 +110,7 @@ TestInjectAssert (
   CHAR16                       *ProblemParam;
   BOOLEAN                      SwAssertInject;
   BOOLEAN                      ExceptionInject;
+  BOOLEAN                      SwAssertInjectMM;
   EFI_STATUS                   Status;
   UINT8                        *TestPtr;
 
@@ -114,7 +167,11 @@ TestInjectAssert (
     ExceptionInject = TRUE;
   }
 
-  if (SwAssertInject && ExceptionInject) {
+  if (ShellCommandLineGetFlag (ParamPackage, L"--swassert_mm")) {
+    SwAssertInjectMM = TRUE;
+  }
+
+  if (SwAssertInject && ExceptionInject && SwAssertInjectMM) {
     ShellPrintHiiEx (-1, -1, NULL, STRING_TOKEN (STR_TEST_INJECT_ASSERT_EXCEPTION), HiiHandle, AppName);
     goto TestInjectAssertDone;
   }
@@ -126,6 +183,19 @@ TestInjectAssert (
   } else if (ExceptionInject == TRUE) {
     InValidateActiveBootChain ();
     *TestPtr = 8;
+  } else if (SwAssertInjectMM == TRUE) {
+    ErrorPrint (L"%a: INJECTING AN ASSERT IN MM \r\n", __FUNCTION__);
+    InjectAssertInMM (ImageHandle, SystemTable);
+    if (EFI_ERROR (Status)) {
+      ErrorPrint (L"%a: Inject Assert in MM failed: %r\n", __FUNCTION__, Status);
+      goto TestInjectAssertDone;
+    }
+
+    InValidateActiveBootChain ();
+    ASSERT (FALSE);
+  } else {
+    ErrorPrint (L"%a: No assert to inject\r\n", __FUNCTION__);
+    goto TestInjectAssertDone;
   }
 
 TestInjectAssertDone:
