@@ -34,12 +34,17 @@ GetPmuBaseInterrupt (
 
   NumPmuHandles = 1;
   Status        = GetMatchingEnabledDeviceTreeNodes ("arm,armv8-pmuv3", &PmuHandle, &NumPmuHandles);
-  if (EFI_ERROR (Status)) {
+  if (EFI_ERROR (Status) && (Status != EFI_BUFFER_TOO_SMALL)) {
     NumPmuHandles = 1;
     Status        = GetMatchingEnabledDeviceTreeNodes ("arm,cortex-a78-pmu", &PmuHandle, &NumPmuHandles);
-    if (EFI_ERROR (Status)) {
-      NumPmuHandles     = 0;
+    if (EFI_ERROR (Status) && (Status != EFI_BUFFER_TOO_SMALL)) {
       *PmuBaseInterrupt = 0;
+      if (Status == EFI_NOT_FOUND) {
+        DEBUG ((DEBUG_INFO, "%a: PMU not found in DTB\n", __FUNCTION__));
+      } else {
+        DEBUG ((DEBUG_ERROR, "%a: Error checking for PMU nodes in DTB: %r\n", __FUNCTION__, Status));
+      }
+
       return Status;
     }
   }
@@ -48,12 +53,53 @@ GetPmuBaseInterrupt (
   Size   = 1;
   Status = GetDeviceTreeInterrupts (PmuHandle, &InterruptData, &Size);
   if (EFI_ERROR (Status)) {
+    DEBUG ((DEBUG_ERROR, "%a: Error getting PMU node interrupt: %r\n", __FUNCTION__, Status));
+    *PmuBaseInterrupt = 0;
     return Status;
   }
 
   ASSERT (InterruptData.Type == INTERRUPT_PPI_TYPE);
   *PmuBaseInterrupt = DEVICETREE_TO_ACPI_INTERRUPT_NUM (InterruptData);
-  return Status;
+  return EFI_SUCCESS;
+}
+
+EFI_STATUS
+EFIAPI
+GetSpeBaseInterrupt (
+  OUT UINT32  *SpeBaseInterrupt
+  )
+{
+  EFI_STATUS                         Status;
+  UINT32                             SpeHandle;
+  UINT32                             NumSpeHandles;
+  NVIDIA_DEVICE_TREE_INTERRUPT_DATA  InterruptData;
+  UINT32                             Size;
+
+  NumSpeHandles = 1;
+  Status        = GetMatchingEnabledDeviceTreeNodes ("arm,statistical-profiling-extension-v1", &SpeHandle, &NumSpeHandles);
+  if (EFI_ERROR (Status) && (Status != EFI_BUFFER_TOO_SMALL)) {
+    *SpeBaseInterrupt = PcdGet32 (PcdSpeOverflowIntrNum);
+    if (Status == EFI_NOT_FOUND) {
+      DEBUG ((DEBUG_INFO, "%a: SPE not found in DTB. SpeOverflowInterrupt will be 0x%x\n", __FUNCTION__, *SpeBaseInterrupt));
+    } else {
+      DEBUG ((DEBUG_ERROR, "%a: Error checking for SPE nodes in DTB: %r\n", __FUNCTION__, Status));
+    }
+
+    return Status;
+  }
+
+  // Only one interrupt is expected
+  Size   = 1;
+  Status = GetDeviceTreeInterrupts (SpeHandle, &InterruptData, &Size);
+  if (EFI_ERROR (Status)) {
+    DEBUG ((DEBUG_ERROR, "%a: Error getting SPE node interrupt: %r\n", __FUNCTION__, Status));
+    *SpeBaseInterrupt = 0;
+    return Status;
+  }
+
+  ASSERT (InterruptData.Type == INTERRUPT_PPI_TYPE);
+  *SpeBaseInterrupt = DEVICETREE_TO_ACPI_INTERRUPT_NUM (InterruptData);
+  return EFI_SUCCESS;
 }
 
 EFI_STATUS
@@ -241,37 +287,33 @@ GicCParser (
   OUT CM_OBJECT_TOKEN              **TokenMapPtr OPTIONAL
   )
 {
-  EFI_STATUS                         Status;
-  UINT32                             NumCores;
-  CM_ARM_GICC_INFO                   *GicCInfo;
-  UINTN                              GicCInfoSize;
-  UINT64                             MpIdr;
-  CM_OBJ_DESCRIPTOR                  Desc;
-  CM_OBJECT_TOKEN                    *GicCInfoTokens;
-  TEGRA_GIC_INFO                     *GicInfo;
-  UINT32                             CoreIndex;
-  UINT32                             ClusterIndex;
-  UINT64                             PmuBaseInterrupt;
-  UINT64                             DbgFeatures;
-  UINT16                             TrbeInterrupt;
-  CM_ARM_ET_INFO                     *EtInfo;
-  CM_OBJECT_TOKEN                    EtToken;
-  UINT32                             NumberOfSpeHandles;
-  UINT32                             SpeOverflowInterruptHandle;
-  UINT32                             NumberOfSpeInterrupts;
-  NVIDIA_DEVICE_TREE_INTERRUPT_DATA  SpeOverflowInterrupt;
-  UINT32                             SpeOverflowInterruptNum;
-  UINTN                              ChipID;
-  CM_OBJECT_TOKEN                    *CpcTokens;
-  CM_OBJECT_TOKEN                    *PsdTokens;
-  UINT32                             SocketId;
-  UINT32                             ClusterId;
-  UINT32                             CoreId;
-  UINT32                             ThreadId;
-  UINT32                             MaxClustersPerSocket;
-  UINT32                             MaxCoresPerSocket;
-  UINT32                             MaxCoresPerCluster;
-  UINT32                             MaxThreadsPerCore;
+  EFI_STATUS         Status;
+  UINT32             NumCores;
+  CM_ARM_GICC_INFO   *GicCInfo;
+  UINTN              GicCInfoSize;
+  UINT64             MpIdr;
+  CM_OBJ_DESCRIPTOR  Desc;
+  CM_OBJECT_TOKEN    *GicCInfoTokens;
+  TEGRA_GIC_INFO     *GicInfo;
+  UINT32             CoreIndex;
+  UINT32             ClusterIndex;
+  UINT64             PmuBaseInterrupt;
+  UINT64             DbgFeatures;
+  UINT16             TrbeInterrupt;
+  CM_ARM_ET_INFO     *EtInfo;
+  CM_OBJECT_TOKEN    EtToken;
+  UINT32             SpeOverflowInterruptNum;
+  UINTN              ChipID;
+  CM_OBJECT_TOKEN    *CpcTokens;
+  CM_OBJECT_TOKEN    *PsdTokens;
+  UINT32             SocketId;
+  UINT32             ClusterId;
+  UINT32             CoreId;
+  UINT32             ThreadId;
+  UINT32             MaxClustersPerSocket;
+  UINT32             MaxCoresPerSocket;
+  UINT32             MaxCoresPerCluster;
+  UINT32             MaxThreadsPerCore;
 
   GicInfo        = NULL;
   GicCInfo       = NULL;
@@ -343,23 +385,10 @@ GicCParser (
     EtToken = CM_NULL_TOKEN;
   }
 
-  // Get SpeOverflow interrupt information
-  NumberOfSpeHandles      = 1;
-  SpeOverflowInterruptNum = 0;
-  Status                  = GetMatchingEnabledDeviceTreeNodes ("arm,statistical-profiling-extension-v1", &SpeOverflowInterruptHandle, &NumberOfSpeHandles);
-  if (Status == EFI_NOT_FOUND) {
-    SpeOverflowInterruptNum = PcdGet32 (PcdSpeOverflowIntrNum);
-    DEBUG ((DEBUG_INFO, "%a: SPE not found in DTB. SpeOverflowInterrupt will be 0x%x\n", __FUNCTION__, SpeOverflowInterruptNum));
-  } else if (EFI_ERROR (Status)) {
-    DEBUG ((DEBUG_ERROR, "%a: Error checking for SPE nodes in DTB: %r\n", __FUNCTION__, Status));
-  } else {
-    NumberOfSpeInterrupts = 1;
-    Status                = GetDeviceTreeInterrupts (SpeOverflowInterruptHandle, &SpeOverflowInterrupt, &NumberOfSpeInterrupts);
-    if (EFI_ERROR (Status)) {
-      DEBUG ((DEBUG_ERROR, "%a: Error getting SPE node interrupt: %r\n", __FUNCTION__, Status));
-    } else {
-      SpeOverflowInterruptNum = DEVICETREE_TO_ACPI_INTERRUPT_NUM (SpeOverflowInterrupt);
-    }
+  // SPE
+  Status = GetSpeBaseInterrupt (&SpeOverflowInterruptNum);
+  if (EFI_ERROR (Status)) {
+    DEBUG ((DEBUG_WARN, "%a: Got %r trying to get SpeBaseInterrupt - continuing with it set to 0x%x\n", __FUNCTION__, Status, SpeOverflowInterruptNum));
   }
 
   // CpcInfo
