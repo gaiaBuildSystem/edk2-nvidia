@@ -2,7 +2,7 @@
 
   QSPI Driver for Standalone MM image.
 
-  SPDX-FileCopyrightText: Copyright (c) 2019-2024, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+  SPDX-FileCopyrightText: Copyright (c) 2019-2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 
   SPDX-License-Identifier: BSD-2-Clause-Patent
 
@@ -92,6 +92,54 @@ QspiControllerPerformTransaction (
 }
 
 /**
+  Apply QSPI controller settings for a specific device
+
+  @param[in] This                  Instance of protocol
+  @param[in] DeviceFeature         Device feature to initialize
+
+  @retval EFI_SUCCESS              Operation successful.
+  @retval others                   Error occurred
+
+**/
+EFI_STATUS
+EFIAPI
+QspiControllerApplyDeviceSpecificSettings (
+  IN NVIDIA_QSPI_CONTROLLER_PROTOCOL  *This,
+  IN QSPI_DEV_FEATURE                 DeviceFeature
+  )
+{
+  EFI_STATUS                    Status;
+  QSPI_CONTROLLER_PRIVATE_DATA  *Private;
+
+  Private = QSPI_CONTROLLER_PRIVATE_DATA_FROM_PROTOCOL (This);
+
+  //
+  // Enable/Disable wait state
+  //
+  if ((Private->ControllerType == CONTROLLER_TYPE_QSPI)) {
+    if (DeviceFeature == QspiDevFeatWaitStateEn) {
+      Status = QspiEnableWaitState (Private->QspiBaseAddress, TRUE);
+      if (EFI_ERROR (Status)) {
+        DEBUG ((DEBUG_ERROR, "%a: Fail to enable wait state\n", __FUNCTION__));
+        return Status;
+      }
+    }
+
+    if (DeviceFeature == QspiDevFeatWaitStateDis) {
+      Status = QspiEnableWaitState (Private->QspiBaseAddress, FALSE);
+      if (EFI_ERROR (Status)) {
+        DEBUG ((DEBUG_ERROR, "%a: Fail to disable wait state\n", __FUNCTION__));
+        return Status;
+      }
+    }
+  } else {
+    return EFI_UNSUPPORTED;
+  }
+
+  return EFI_SUCCESS;
+}
+
+/**
   Get QSPI number of chip selects
 
   @param[in]  This                 Instance of protocol
@@ -147,7 +195,7 @@ QspiControllerStMmInitialize (
   IN EFI_MM_SYSTEM_TABLE  *MmSystemTable
   )
 {
-  EFI_STATUS                    Status;
+  EFI_STATUS                    Status = EFI_SUCCESS;
   QSPI_CONTROLLER_PRIVATE_DATA  *Private;
   BOOLEAN                       WaitCyclesSupported;
   UINT8                         NumChipSelects;
@@ -210,11 +258,13 @@ QspiControllerStMmInitialize (
         Private->QspiBaseAddress,
         Status
         ));
+      FreePool (Private);
       continue;
     }
 
-    Private->QspiControllerProtocol.PerformTransaction = QspiControllerPerformTransaction;
-    Private->QspiControllerProtocol.GetNumChipSelects  = QspiControllerGetNumChipSelects;
+    Private->QspiControllerProtocol.PerformTransaction          = QspiControllerPerformTransaction;
+    Private->QspiControllerProtocol.GetNumChipSelects           = QspiControllerGetNumChipSelects;
+    Private->QspiControllerProtocol.ApplyDeviceSpecificSettings = QspiControllerApplyDeviceSpecificSettings;
 
     Handle = NULL;
     Status = gMmst->MmInstallProtocolInterface (
@@ -225,11 +275,19 @@ QspiControllerStMmInitialize (
                       );
     if (EFI_ERROR (Status)) {
       DEBUG ((DEBUG_ERROR, "%a: Failed to install QspiControllerProtocol \n", __FUNCTION__));
+      FreePool (Private);
       goto ErrorExit;
     }
 
     SockNum = AllocateRuntimeZeroPool (sizeof (UINT32));
     if (SockNum == NULL) {
+      Status = gMmst->MmUninstallProtocolInterface (
+                        Handle,
+                        &gNVIDIAQspiControllerProtocolGuid,
+                        &Private->QspiControllerProtocol
+                        );
+      ASSERT_EFI_ERROR (Status);
+      FreePool (Private);
       return EFI_OUT_OF_RESOURCES;
     }
 
@@ -242,10 +300,20 @@ QspiControllerStMmInitialize (
                         );
     if (EFI_ERROR (Status)) {
       DEBUG ((DEBUG_ERROR, "%a: Failed to install SocketIdProtocol \n", __FUNCTION__));
+      FreePool (SockNum);
+      Status = gMmst->MmUninstallProtocolInterface (
+                        Handle,
+                        &gNVIDIAQspiControllerProtocolGuid,
+                        &Private->QspiControllerProtocol
+                        );
+      ASSERT_EFI_ERROR (Status);
+      FreePool (Private);
       goto ErrorExit;
     }
   }
 
+  Status = EFI_SUCCESS;
+
 ErrorExit:
-  return EFI_SUCCESS;
+  return Status;
 }
