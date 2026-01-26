@@ -1,0 +1,48 @@
+#/** @file
+#
+#  TPM 2.0 functions for Standalone MM
+#
+#  SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+#
+#  Copyright (c) 2013 - 2018, Intel Corporation. All rights reserved.<BR>
+#  Copyright (c) Microsoft Corporation.
+#  SPDX-License-Identifier: BSD-2-Clause-Patent
+#
+#**/
+
+[Defines]
+  INF_VERSION                    = 0x00010005
+  BASE_NAME                      = Tpm2DeviceLib
+  FILE_GUID                      = b8ca3624-45cd-11ed-c92a-937cfb0ec133
+  MODULE_TYPE                    = MM_STANDALONE
+  VERSION_STRING                 = 1.0
+  PI_SPECIFICATION_VERSION       = 0x00010032
+  LIBRARY_CLASS                  = Tpm2DeviceLib|MM_STANDALONE
+  CONSTRUCTOR                    = Tpm2DeviceLibStandaloneMmConstructor
+
+[Sources.common]
+  Tpm2DeviceLibStandaloneMm.c
+  Tpm2Tis.c
+  Tpm2DeviceLibInternal.h
+
+[Packages]
+  MdePkg/MdePkg.dec
+  SecurityPkg/SecurityPkg.dec
+  Silicon/NVIDIA/NVIDIA.dec
+  StandaloneMmPkg/StandaloneMmPkg.dec
+
+[LibraryClasses]
+  BaseLib
+  BaseMemoryLib
+  DebugLib
+  IoLib
+  TimerLib
+  MemoryAllocationLib
+  MmServicesTableLib
+
+[Protocols]
+  gNVIDIATpm2ProtocolGuid  ## CONSUMES
+
+[Depex]
+  gNVIDIATpm2ProtocolGuid
+
