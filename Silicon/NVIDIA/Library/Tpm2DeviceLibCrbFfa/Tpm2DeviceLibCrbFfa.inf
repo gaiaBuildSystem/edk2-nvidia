@@ -1,0 +1,59 @@
+#/** @file
+#
+#  TPM 2.0 functions using CRB over FF-A to StandaloneMM
+#
+#  SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+#
+#  SPDX-License-Identifier: BSD-2-Clause-Patent
+#
+#**/
+[Defines]
+  INF_VERSION                    = 0x00010005
+  BASE_NAME                      = Tpm2DeviceLibCrbFfa
+  FILE_GUID                      = 1f9d8e4a-2b3c-4d5e-9f8a-7b6c5d4e3f2a
+  MODULE_TYPE                    = DXE_DRIVER
+  VERSION_STRING                 = 1.0
+  LIBRARY_CLASS                  = Tpm2DeviceLib|DXE_DRIVER DXE_RUNTIME_DRIVER UEFI_DRIVER UEFI_APPLICATION
+  CONSTRUCTOR                    = Tpm2DeviceLibConstructor
+
+[Sources.common]
+  Tpm2DeviceLibCrbFfa.c
+
+[Packages]
+  MdePkg/MdePkg.dec
+  SecurityPkg/SecurityPkg.dec
+  Silicon/NVIDIA/NVIDIA.dec
+  ArmPkg/ArmPkg.dec
+
+[LibraryClasses]
+  ArmLib
+  BaseLib
+  BaseMemoryLib
+  DebugLib
+  TimerLib
+  ReportStatusCodeLib
+  UefiBootServicesTableLib
+  MemoryAllocationLib
+  PcdLib
+  PrintLib
+  UefiLib
+  Tpm2CommandLib
+  HashLib
+  ArmFfaLib
+
+[Guids]
+  gTpm2ServiceFfaGuid           ## CONSUMES
+
+[Pcd]
+  gEfiSecurityPkgTokenSpaceGuid.PcdActiveTpmInterfaceType   ## PRODUCES
+  gEfiSecurityPkgTokenSpaceGuid.PcdTpm2HashMask             ## PRODUCES
+  gEfiSecurityPkgTokenSpaceGuid.PcdTcg2HashAlgorithmBitmap  ## PRODUCES
+  gEfiSecurityPkgTokenSpaceGuid.PcdTpm2SelfTestPolicy       ## CONSUMES
+  gEfiSecurityPkgTokenSpaceGuid.PcdTpm2InitializationPolicy ## CONSUMES
+  gNVIDIATokenSpaceGuid.PcdTpmPresent                       ## CONSUMES
+  gNVIDIATokenSpaceGuid.PcdTpmEnable                        ## CONSUMES
+  gNVIDIATokenSpaceGuid.PcdTpmCrbBase                       ## PRODUCES
+  gNVIDIATokenSpaceGuid.PcdTpmCrbSize                       ## PRODUCES
+  gNVIDIATokenSpaceGuid.PcdTpmCrbFfa                        ## PRODUCES
+  gNVIDIATokenSpaceGuid.PcdTpmCrbFfaPartitionId             ## PRODUCES
+  gNVIDIATokenSpaceGuid.PcdTpmCrbFfaNotification            ## PRODUCES
