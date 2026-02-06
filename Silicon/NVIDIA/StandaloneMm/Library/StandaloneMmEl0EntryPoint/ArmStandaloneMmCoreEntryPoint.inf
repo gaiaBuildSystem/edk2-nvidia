@@ -38,6 +38,7 @@
   ArmPkg/ArmPkg.dec
   MdePkg/MdePkg.dec
   MdeModulePkg/MdeModulePkg.dec
+  SecurityPkg/SecurityPkg.dec
   StandaloneMmPkg/StandaloneMmPkg.dec
 
 [Packages]
@@ -62,6 +63,7 @@
   gEfiHobListGuid
   gArmStandaloneMmDeviceMemoryRegions
   gArmStandaloneMmPlatformInfoGuid
+  gTpm2ServiceFfaGuid
 
 [Protocols]
   gEdkiiPiMmCpuDriverEpProtocolGuid

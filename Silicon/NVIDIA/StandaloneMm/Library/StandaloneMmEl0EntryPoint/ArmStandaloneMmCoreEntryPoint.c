@@ -47,6 +47,8 @@
 #include <IndustryStandard/ArmFfaSvc.h>
 #include <IndustryStandard/ArmFfaBootInfo.h>
 
+#include <Guid/Tpm2ServiceFfa.h>
+
 #include <Protocol/PiMmCpuDriverEp.h>
 #include <Protocol/MmCommunication.h>
 
@@ -730,13 +732,13 @@ SetEventCompleteSvcArgs (
         EventCompleteSvcArgs->Arg3 = ARM_FID_SPM_MM_SP_EVENT_COMPLETE;
       } else {
         EventCompleteSvcArgs->Arg0 = ARM_FID_FFA_MSG_SEND_DIRECT_RESP2;
+      }
 
-        if (FfaMsgInfo->ServiceType == ServiceTypeMisc) {
-          EventCompleteSvcArgs->Arg4 = mMiscMmCommunicateBuffer->DirectMsgArgs.Arg0;
-          EventCompleteSvcArgs->Arg5 = mMiscMmCommunicateBuffer->DirectMsgArgs.Arg1;
-          EventCompleteSvcArgs->Arg6 = mMiscMmCommunicateBuffer->DirectMsgArgs.Arg2;
-          EventCompleteSvcArgs->Arg7 = mMiscMmCommunicateBuffer->DirectMsgArgs.Arg3;
-        }
+      if (FfaMsgInfo->ServiceType == ServiceTypeMisc) {
+        EventCompleteSvcArgs->Arg4 = mMiscMmCommunicateBuffer->DirectMsgArgs.Arg0;
+        EventCompleteSvcArgs->Arg5 = mMiscMmCommunicateBuffer->DirectMsgArgs.Arg1;
+        EventCompleteSvcArgs->Arg6 = mMiscMmCommunicateBuffer->DirectMsgArgs.Arg2;
+        EventCompleteSvcArgs->Arg7 = mMiscMmCommunicateBuffer->DirectMsgArgs.Arg3;
       }
 
       /*
@@ -828,6 +830,34 @@ ConvertUuidToEfiGuid (
 }
 
 /**
+  Check if the given FID is a TPM FID.
+
+  @param  [in] Fid        Function ID to check.
+
+  @retval TRUE            FID is a TPM FID.
+  @retval FALSE           FID is not a TPM FID.
+**/
+STATIC
+BOOLEAN
+EFIAPI
+IsTpmFid (
+  IN UINTN  Fid
+  )
+{
+  switch (Fid) {
+    case TPM2_FFA_GET_INTERFACE_VERSION:
+    case TPM2_FFA_GET_FEATURE_INFO:
+    case TPM2_FFA_START:
+    case TPM2_FFA_REGISTER_FOR_NOTIFICATION:
+    case TPM2_FFA_UNREGISTER_FROM_NOTIFICATION:
+    case TPM2_FFA_FINISH_NOTIFIED:
+      return TRUE;
+    default:
+      return FALSE;
+  }
+}
+
+/**
   A loop to delegate events from SPMC.
   DelegatedEventLoop() calls ArmCallSvc() to exit to SPMC.
   When an event is delegated to StandaloneMm the SPMC returns control
@@ -892,6 +922,13 @@ DelegatedEventLoop (
       if (EventCompleteSvcArgs->Arg0 == ARM_FID_FFA_MSG_SEND_DIRECT_REQ) {
         FfaMsgInfo.DirectMsgVersion = DirectMsgV1;
         ServiceType                 = ServiceTypeMmCommunication;
+        //
+        // TPM CRB over FF-A does not use communication buffer, treat it as ServiceTypeMisc instead
+        //
+        if ((EventCompleteSvcArgs->Arg3 == 0) && IsTpmFid (EventCompleteSvcArgs->Arg4)) {
+          ServiceType = ServiceTypeMisc;
+          CopyGuid (&ServiceGuid, &gTpm2ServiceFfaGuid);
+        }
       } else if (EventCompleteSvcArgs->Arg0 == ARM_FID_FFA_MSG_SEND_DIRECT_REQ2) {
         FfaMsgInfo.DirectMsgVersion = DirectMsgV2;
         Uuid[0]                     = EventCompleteSvcArgs->Arg2;
