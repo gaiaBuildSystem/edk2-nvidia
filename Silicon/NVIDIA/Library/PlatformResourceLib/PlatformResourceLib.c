@@ -421,9 +421,9 @@ UpdatePlatformResourceInformation (
   }
 
   CoreInfoIndex = 0;
-  for (CoreIndex = 0; CoreIndex < SocCoreBitmapInfo.MaxPossibleCoresPerSystem; CoreIndex++) {
-    if (PlatformResourceIsCoreEnabled (&SocCoreBitmapInfo, CoreIndex)) {
-      for (ThreadId = 0; ThreadId < SocCoreBitmapInfo.ThreadsPerCore; ThreadId++) {
+  for (ThreadId = 0; ThreadId < SocCoreBitmapInfo.ThreadsPerCore; ThreadId++) {
+    for (CoreIndex = 0; CoreIndex < SocCoreBitmapInfo.MaxPossibleCoresPerSystem; CoreIndex++) {
+      if (PlatformResourceIsCoreEnabled (&SocCoreBitmapInfo, CoreIndex)) {
         ArmCoreInfo[CoreInfoIndex].Mpidr = GetMpidrFromCoreIndex (&SocCoreBitmapInfo, CoreIndex, ThreadId);
         CoreInfoIndex++;
       }

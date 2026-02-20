@@ -341,7 +341,7 @@ ProcHierarchyInfoParser (
       // This is only used for the container node type if there are threads
       ProcHierarchyInfo[ProcHierarchyIndex].OverrideUid = GEN_CONTAINER_UID (3, SocketId, ClusterId, CoreId);
 
-      CoreTokenMap[CoreId + (MaxCoresPerSocket*SocketId)] = ProcHierarchyInfo[ProcHierarchyIndex].Token;
+      CoreTokenMap[(ClusterId * MaxCoresPerCluster) + CoreId + (MaxCoresPerSocket*SocketId)] = ProcHierarchyInfo[ProcHierarchyIndex].Token;
 
       ProcHierarchyIndex++;
     }
@@ -356,7 +356,7 @@ ProcHierarchyInfoParser (
                                                       EFI_ACPI_6_6_PPTT_NODE_IS_LEAF,
                                                       EFI_ACPI_6_6_PPTT_IMPLEMENTATION_NOT_IDENTICAL
                                                       );
-      ProcHierarchyInfo[ProcHierarchyIndex].ParentToken = CoreTokenMap[CoreId + (MaxCoresPerSocket*SocketId)];
+      ProcHierarchyInfo[ProcHierarchyIndex].ParentToken = CoreTokenMap[(ClusterId * MaxCoresPerCluster) + CoreId + (MaxCoresPerSocket*SocketId)];
       DEBUG ((DEBUG_INFO, "%a: Building multi-thread object ID: %llx Flags: %x Token: %x ParentToken: %x\n", __FUNCTION__, ProcessorId, ProcHierarchyInfo[ProcHierarchyIndex].Flags, ProcHierarchyInfo[ProcHierarchyIndex].Token, ProcHierarchyInfo[ProcHierarchyIndex].ParentToken));
       ProcHierarchyInfo[ProcHierarchyIndex].AcpiIdObjectToken          = GicCInfoTokens[CoreIndex];
       ProcHierarchyInfo[ProcHierarchyIndex].NoOfPrivateResources       = 0;
