@@ -2,7 +2,7 @@
   Platform Redfish boot order driver.
 
   (C) Copyright 2022 Hewlett Packard Enterprise Development LP<BR>
-  SPDX-FileCopyrightText: Copyright (c) 2023-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+  SPDX-FileCopyrightText: Copyright (c) 2023-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 
   SPDX-License-Identifier: BSD-2-Clause-Patent
 
@@ -139,13 +139,21 @@ RefreshBootOrderList (
   }
 
   //
-  // for better user experience
-  // 1. User changes HD configuration (e.g.: unplug HDD), here we have a chance to remove the HDD boot option
-  // 2. User enables/disables UEFI PXE, here we have a chance to add/remove EFI Network boot option
+  // Only call EfiBootManagerRefreshAllBootOption() if boot options have not
+  // been enumerated yet. PlatformBootManagerBeforeConsole() typically calls
+  // this before the Redfish provisioning event fires, so avoid the redundant
+  // (and potentially slow) device re-enumeration.
   //
-  EfiBootManagerRefreshAllBootOption ();
-
   BootOption = EfiBootManagerGetLoadOptions (&BootOptionCount, LoadOptionTypeBoot);
+  if (BootOptionCount == 0) {
+    EfiBootManagerRefreshAllBootOption ();
+    if (BootOption != NULL) {
+      EfiBootManagerFreeLoadOptions (BootOption, BootOptionCount);
+    }
+
+    BootOption = EfiBootManagerGetLoadOptions (&BootOptionCount, LoadOptionTypeBoot);
+  }
+
   DEBUG ((REDFISH_BOOT_DEBUG_DUMP, "%a: total boot options: %u\n", __func__, BootOptionCount));
 
   if (BootOptionCount == 0) {
