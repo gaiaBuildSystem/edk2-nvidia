@@ -1458,8 +1458,6 @@ CONFIG_FMP_CERTIFICATES_DTB_MAX_SIZE=0
    gNVIDIATokenSpaceGuid.PcdPerFpLimit|7
  !endif
   gNVIDIATokenSpaceGuid.PcdDataOnlyFlashIsSupported|TRUE
-  # HTTP transfer buffer size (8KB)
-  gEfiNetworkPkgTokenSpaceGuid.PcdHttpTransferBufferSize|0x2000
 
 [PcdsDynamicDefault.common.TH500]
   gEfiMdeModulePkgTokenSpaceGuid.PcdAcpiDefaultOemTableId|'TH500   '
