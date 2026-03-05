@@ -117,7 +117,7 @@
   #  DEBUG_MANAGEABILITY  0x00800000  // Detailed debug and payload manageability messages
   #                                   // related to modules such as Redfish, IPMI, MCTP etc.
   #  DEBUG_ERROR          0x80000000  // Error
-  gEfiMdePkgTokenSpaceGuid.PcdDebugPrintErrorLevel|0x8000000F
+  gEfiMdePkgTokenSpaceGuid.PcdDebugPrintErrorLevel|0x8000000B
 
   # DEBUG_ASSERT_ENABLED       0x01
   # DEBUG_PRINT_ENABLED        0x02
