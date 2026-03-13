@@ -2,7 +2,7 @@
   Redfish resource identify library implementation for computer system version 1.17.0
 
   (C) Copyright 2022 Hewlett Packard Enterprise Development LP<BR>
-  SPDX-FileCopyrightText: Copyright (c) 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+  SPDX-FileCopyrightText: Copyright (c) 2024-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 
   SPDX-License-Identifier: BSD-2-Clause-Patent
 
@@ -79,6 +79,10 @@ RedfishIdentifyResource (
 
   List = GetFirstLink (&ComputerSystemCs->Bios);
   if (List == NULL) {
+    goto ON_RELEASE;
+  }
+
+  if (ComputerSystemCs->Boot == NULL) {
     goto ON_RELEASE;
   }
 
