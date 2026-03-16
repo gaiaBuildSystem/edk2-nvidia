@@ -77,7 +77,13 @@ TegraGetPlatform (
 {
   UINT32  Hidrev;
   UINT32  PlatType;
-  UINT64  MiscRegBaseAddr = FixedPcdGet64 (PcdMiscRegBaseAddress);
+  UINT64  MiscRegBaseAddr;
+
+  if (FixedPcdGetBool (PcdTegraForceSiliconPlatform)) {
+    return TEGRA_PLATFORM_SILICON;
+  }
+
+  MiscRegBaseAddr = FixedPcdGet64 (PcdMiscRegBaseAddress);
 
   if (MiscRegBaseAddr == 0) {
     DEBUG ((DEBUG_ERROR, "%a: Failed to read HIDREV register\n", __FUNCTION__));

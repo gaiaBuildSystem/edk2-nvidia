@@ -865,6 +865,12 @@ menu "Hardware support"
   depends on SUPPORTS_BOOTLOADER_RAMDISK
   help
     Support for ramdisk loaded prior to UEFI Start
+
+  config FORCE_SILICON_PLATFORM
+  bool "Force silicon platform type"
+  help
+    Always report platform type as TEGRA_PLATFORM_SILICON. Enable this for
+    platforms that have no pre-silicon variants.
 endmenu
 
 menu "OS Hardware description"

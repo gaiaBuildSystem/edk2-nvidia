@@ -892,6 +892,10 @@ CONFIG_FMP_CERTIFICATES_DTB_MAX_SIZE=0
 
   gEmbeddedTokenSpaceGuid.PcdTimerPeriod|1000
 
+!ifdef CONFIG_FORCE_SILICON_PLATFORM
+  gNVIDIATokenSpaceGuid.PcdTegraForceSiliconPlatform|TRUE
+!endif
+
 !ifdef CONFIG_BOOT_UI_MENU_DISABLED
   gEfiMdeModulePkgTokenSpaceGuid.PcdDriverHealthConfigureForm|{ 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 }
 !endif

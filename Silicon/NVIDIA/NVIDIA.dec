@@ -530,6 +530,9 @@
 #Tegra UTC UART address
   gNVIDIATokenSpaceGuid.PcdTegraUtcUartAddress|0x0|UINT64|0x00000169
 
+#Force platform type to TEGRA_PLATFORM_SILICON
+  gNVIDIATokenSpaceGuid.PcdTegraForceSiliconPlatform|FALSE|BOOLEAN|0x00000172
+
 #Indicate if there is a GPT for each boot chain
   gNVIDIATokenSpaceGuid.PcdGptIsPerBootChain|FALSE|BOOLEAN|0x000000A5
 
