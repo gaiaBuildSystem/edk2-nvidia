@@ -8,7 +8,7 @@
   Tpm2ExecutePendingTpmRequest() will receive untrusted input and do validation.
 
 Copyright (c) 2013 - 2020, Intel Corporation. All rights reserved.<BR>
-SPDX-FileCopyrightText: Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+SPDX-FileCopyrightText: Copyright (c) 2023 - 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 SPDX-License-Identifier: BSD-2-Clause-Patent
 
 **/
@@ -26,6 +26,7 @@ SPDX-License-Identifier: BSD-2-Clause-Patent
 #include <Library/PrintLib.h>
 #include <Library/HiiLib.h>
 #include <Library/HobLib.h>
+#include <Library/PcdLib.h>
 #include <Guid/EventGroup.h>
 #include <Guid/Tcg2PhysicalPresenceData.h>
 #include <Library/Tpm2CommandLib.h>
@@ -39,7 +40,8 @@ SPDX-License-Identifier: BSD-2-Clause-Patent
 #include <NVIDIAStatusCodes.h>
 #include <OemStatusCodes.h>
 
-#define CONFIRM_BUFFER_SIZE  4096
+#define CONFIRM_BUFFER_SIZE               4096
+#define TPM_PPI_WATCHDOG_TIMEOUT_SECONDS  ((PcdGet16 (PcdBootWatchdogTime) * 60) / 5)
 
 EFI_HII_HANDLE  mTcg2PpStringPackHandle;
 
@@ -291,6 +293,11 @@ Tcg2ReadUserKey (
   EFI_INPUT_KEY  Key;
   UINT16         InputKey;
 
+  //
+  // Disable watchdog before polling for keys.
+  //
+  gBS->SetWatchdogTimer (0, 0, 0, NULL);
+
   InputKey = 0;
   do {
     Status = gBS->CheckEvent (gST->ConIn->WaitForKey);
@@ -309,6 +316,11 @@ Tcg2ReadUserKey (
       }
     }
   } while (InputKey == 0);
+
+  //
+  // Re-enable watchdog
+  //
+  gBS->SetWatchdogTimer (TPM_PPI_WATCHDOG_TIMEOUT_SECONDS, 0x0000, 0x00, NULL);
 
   if (InputKey != SCAN_ESC) {
     return TRUE;
