@@ -7,7 +7,6 @@
   SPDX-License-Identifier: BSD-2-Clause-Patent
 
 **/
-
 #include <Library/BaseLib.h>
 #include <Library/BaseMemoryLib.h>
 #include <Library/BootChainInfoLib.h>
@@ -588,10 +587,7 @@ FwDeviceAddAsPartition (
   EFI_STATUS                 Status;
   FW_PARTITION_PRIVATE_DATA  *Private;
   FW_PARTITION_INFO          *PartitionInfo;
-  UINT16                     DeviceInstance;
-  UINT64                     PartitionOffset;
-  UINT64                     PartitionSize;
-  EFI_PHYSICAL_ADDRESS       CpuBlParamsAddr;
+  PARTITION_INFO             DevicePartitionInfo;
 
   if (mNumFwPartitions >= mMaxFwPartitions) {
     DEBUG ((
@@ -605,91 +601,76 @@ FwDeviceAddAsPartition (
   }
 
   if ((StrCmp (Name, L"MM-NorFlash") == 0)) {
-    Status = GetCpuBlParamsAddrStMm (&CpuBlParamsAddr);
+    Status = GetPartitionData (
+               TEGRABL_RAS_ERROR_LOGS,
+               &DevicePartitionInfo
+               );
     if (!EFI_ERROR (Status)) {
-      Status = GetPartitionInfoStMm (
-                 (UINTN)CpuBlParamsAddr,
-                 TEGRABL_RAS_ERROR_LOGS,
-                 &DeviceInstance,
-                 &PartitionOffset,
-                 &PartitionSize
+      Status = FwPartitionAdd (
+                 L"MM-RAS",
+                 DeviceInfo,
+                 DevicePartitionInfo.PartitionByteOffset,
+                 DevicePartitionInfo.PartitionSize
                  );
-      if (!EFI_ERROR (Status)) {
-        Status = FwPartitionAdd (
-                   L"MM-RAS",
-                   DeviceInfo,
-                   PartitionOffset,
-                   PartitionSize
-                   );
-        if (EFI_ERROR (Status)) {
-          DEBUG ((DEBUG_ERROR, "%a: Can't add partition MM-RAS\n", __FUNCTION__));
-        }
-      } else {
-        DEBUG ((DEBUG_ERROR, "%a: Can't find partition MM-RAS: %r\n", __FUNCTION__, Status));
+      if (EFI_ERROR (Status)) {
+        DEBUG ((DEBUG_ERROR, "%a: Can't add partition MM-RAS\n", __FUNCTION__));
       }
+    } else {
+      DEBUG ((DEBUG_ERROR, "%a: Can't find partition MM-RAS: %r\n", __FUNCTION__, Status));
+    }
 
-      Status = GetPartitionInfoStMm (
-                 (UINTN)CpuBlParamsAddr,
-                 TEGRABL_CMET,
-                 &DeviceInstance,
-                 &PartitionOffset,
-                 &PartitionSize
+    Status = GetPartitionData (
+               TEGRABL_CMET,
+               &DevicePartitionInfo
+               );
+    if (!EFI_ERROR (Status)) {
+      Status = FwPartitionAdd (
+                 L"MM-CMET",
+                 DeviceInfo,
+                 DevicePartitionInfo.PartitionByteOffset,
+                 DevicePartitionInfo.PartitionSize
                  );
-      if (!EFI_ERROR (Status)) {
-        Status = FwPartitionAdd (
-                   L"MM-CMET",
-                   DeviceInfo,
-                   PartitionOffset,
-                   PartitionSize
-                   );
-        if (EFI_ERROR (Status)) {
-          DEBUG ((DEBUG_ERROR, "%a: Can't add partition MM-CMET\n", __FUNCTION__));
-        }
-      } else {
-        DEBUG ((DEBUG_ERROR, "%a: Can't find partition MM-CMET: %r\n", __FUNCTION__, Status));
+      if (EFI_ERROR (Status)) {
+        DEBUG ((DEBUG_ERROR, "%a: Can't add partition MM-CMET\n", __FUNCTION__));
       }
+    } else {
+      DEBUG ((DEBUG_ERROR, "%a: Can't find partition MM-CMET: %r\n", __FUNCTION__, Status));
+    }
 
-      Status = GetPartitionInfoStMm (
-                 (UINTN)CpuBlParamsAddr,
-                 TEGRABL_EARLY_BOOT_VARS,
-                 &DeviceInstance,
-                 &PartitionOffset,
-                 &PartitionSize
+    Status = GetPartitionData (
+               TEGRABL_EARLY_BOOT_VARS,
+               &DevicePartitionInfo
+               );
+    if (!EFI_ERROR (Status)) {
+      Status = FwPartitionAdd (
+                 L"MM-EBV",
+                 DeviceInfo,
+                 DevicePartitionInfo.PartitionByteOffset,
+                 DevicePartitionInfo.PartitionSize
                  );
-      if (!EFI_ERROR (Status)) {
-        Status = FwPartitionAdd (
-                   L"MM-EBV",
-                   DeviceInfo,
-                   PartitionOffset,
-                   PartitionSize
-                   );
-        if (EFI_ERROR (Status)) {
-          DEBUG ((DEBUG_ERROR, "%a: Can't add partition EARLY_BOOT_VARS\n", __FUNCTION__));
-        }
-      } else {
-        DEBUG ((DEBUG_ERROR, "%a: Can't find partition EARLY_BOOT_VARS: %r\n", __FUNCTION__, Status));
+      if (EFI_ERROR (Status)) {
+        DEBUG ((DEBUG_ERROR, "%a: Can't add partition EARLY_BOOT_VARS\n", __FUNCTION__));
       }
+    } else {
+      DEBUG ((DEBUG_ERROR, "%a: Can't find partition EARLY_BOOT_VARS: %r\n", __FUNCTION__, Status));
+    }
 
-      Status = GetPartitionInfoStMm (
-                 (UINTN)CpuBlParamsAddr,
-                 TEGRAUEFI_CAPSULE,
-                 &DeviceInstance,
-                 &PartitionOffset,
-                 &PartitionSize
+    Status = GetPartitionData (
+               TEGRAUEFI_CAPSULE,
+               &DevicePartitionInfo
+               );
+    if (!EFI_ERROR (Status)) {
+      Status = FwPartitionAdd (
+                 L"MM-Capsule",
+                 DeviceInfo,
+                 DevicePartitionInfo.PartitionByteOffset,
+                 DevicePartitionInfo.PartitionSize
                  );
-      if (!EFI_ERROR (Status)) {
-        Status = FwPartitionAdd (
-                   L"MM-Capsule",
-                   DeviceInfo,
-                   PartitionOffset,
-                   PartitionSize
-                   );
-        if (EFI_ERROR (Status)) {
-          DEBUG ((DEBUG_ERROR, "%a: Can't add partition MM-Capsule\n", __FUNCTION__));
-        }
-      } else {
-        DEBUG ((DEBUG_ERROR, "%a: Can't find partition MM-Capsule: %r\n", __FUNCTION__, Status));
+      if (EFI_ERROR (Status)) {
+        DEBUG ((DEBUG_ERROR, "%a: Can't add partition MM-Capsule\n", __FUNCTION__));
       }
+    } else {
+      DEBUG ((DEBUG_ERROR, "%a: Can't find partition MM-Capsule: %r\n", __FUNCTION__, Status));
     }
 
     return EFI_SUCCESS;
