@@ -405,7 +405,11 @@ MctpMmHasErot (
     }
 
     Socket++;
-    ASSERT (Socket < 100);      // enforce socket@xx string max
+    if (Socket >= 100) {
+      DEBUG ((DEBUG_ERROR, "%a: socket index exceeds socket@xx string capacity\n", __FUNCTION__));
+      ASSERT (FALSE);
+      break;
+    }
   }
 
   return FALSE;

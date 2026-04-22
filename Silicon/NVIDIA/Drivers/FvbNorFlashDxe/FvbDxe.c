@@ -2,7 +2,7 @@
 
   Fvb Driver
 
-  SPDX-FileCopyrightText: Copyright (c) 2018-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+  SPDX-FileCopyrightText: Copyright (c) 2018-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
   Copyright (c) 2011 - 2014, ARM Ltd. All rights reserved.<BR>
 
   SPDX-License-Identifier: BSD-2-Clause-Patent
@@ -432,7 +432,6 @@ FvbWrite (
 
   if (EFI_ERROR (Status)) {
     DEBUG ((DEBUG_ERROR, "%a: FVB write failed. Recovered FVB could be corrupt.\n", __FUNCTION__));
-    ASSERT (FALSE);
     if (Private->PartitionData != NULL) {
       Private->NorFlashProtocol->Read (
                                    Private->NorFlashProtocol,
@@ -584,7 +583,6 @@ FvbEraseBlocks (
                                           );
     if (EFI_ERROR (Status)) {
       DEBUG ((DEBUG_ERROR, "%a: FVB write failed. Recovered FVB could be corrupt.\n", __FUNCTION__));
-      ASSERT (FALSE);
       if (Private->PartitionData != NULL) {
         Private->NorFlashProtocol->Read (
                                      Private->NorFlashProtocol,
@@ -714,13 +712,22 @@ InitializeFvAndVariableStoreHeaders (
       return Status;
     }
 
-    NorFlashProtocol->Read (
-                        NorFlashProtocol,
-                        PartitionOffset,
-                        PartitionSize,
-                        FirmwareVolumeHeader
-                        );
-    ASSERT (IsErasedFlashBuffer ((UINT8 *)FirmwareVolumeHeader, PartitionSize));
+    Status = NorFlashProtocol->Read (
+                                 NorFlashProtocol,
+                                 PartitionOffset,
+                                 PartitionSize,
+                                 FirmwareVolumeHeader
+                                 );
+    if (EFI_ERROR (Status)) {
+      DEBUG ((DEBUG_ERROR, "%a: Failed to read back flash after erase\n", __FUNCTION__));
+      return Status;
+    }
+
+    if (!IsErasedFlashBuffer ((UINT8 *)FirmwareVolumeHeader, PartitionSize)) {
+      DEBUG ((DEBUG_ERROR, "%a: Flash not fully erased after erase operation\n", __FUNCTION__));
+      ASSERT (FALSE);
+      return EFI_DEVICE_ERROR;
+    }
   }
 
   //
@@ -1309,8 +1316,11 @@ FVBInitialize (
     }
   }
 
-  /* If the partition sizes aren't set OR if FTW isn't big enough, assert. */
-  ASSERT_EFI_ERROR (Status);
+  if (EFI_ERROR (Status)) {
+    DEBUG ((DEBUG_ERROR, "%a: Failed to get partition info\n", __FUNCTION__));
+    ASSERT_EFI_ERROR (Status);
+    return Status;
+  }
 
   // Build FVB instances
   FvpData = NULL;

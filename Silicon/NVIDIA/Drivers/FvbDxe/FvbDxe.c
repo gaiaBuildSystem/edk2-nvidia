@@ -3,7 +3,7 @@
   Fvb Driver
 
   Copyright (c) 2011 - 2014, ARM Ltd. All rights reserved.<BR>
-  SPDX-FileCopyrightText: Copyright (c) 2018-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+  SPDX-FileCopyrightText: Copyright (c) 2018-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
   SPDX-License-Identifier: BSD-2-Clause-Patent
 
 **/
@@ -407,7 +407,6 @@ FvbWrite (
 
   if (EFI_ERROR (Status)) {
     DEBUG ((DEBUG_ERROR, "%a: FVB write failed. Recovered FVB could be corrupt.\n", __FUNCTION__));
-    ASSERT (FALSE);
     Private->BlockIo->ReadBlocks (
                         Private->BlockIo,
                         Private->BlockIo->Media->MediaId,
@@ -556,7 +555,6 @@ FvbEraseBlocks (
                                    );
       if (EFI_ERROR (Status)) {
         DEBUG ((DEBUG_ERROR, "%a: FVB write failed. Recovered FVB could be corrupt.\n", __FUNCTION__));
-        ASSERT (FALSE);
         Private->BlockIo->ReadBlocks (
                             Private->BlockIo,
                             Private->BlockIo->Media->MediaId,

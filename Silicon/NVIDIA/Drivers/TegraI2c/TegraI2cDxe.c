@@ -997,7 +997,8 @@ TegraI2CDriverBindingStart (
   )
 {
   EFI_STATUS                       Status;
-  NVIDIA_TEGRA_I2C_PRIVATE_DATA    *Private = NULL;
+  NVIDIA_TEGRA_I2C_PRIVATE_DATA    *Private    = NULL;
+  BOOLEAN                          SlotClaimed = FALSE;
   UINTN                            RegionSize;
   CONST UINT32                     *DtClockHertz;
   CONST UINT32                     *DtControllerId;
@@ -1039,8 +1040,15 @@ TegraI2CDriverBindingStart (
     goto ErrorExit;
   }
 
-  ASSERT (mI2cMasterCount < MAX_I2C_MASTERS);
+  if (mI2cMasterCount >= MAX_I2C_MASTERS) {
+    DEBUG ((DEBUG_ERROR, "%a: Too many I2C masters, increase MAX_I2C_MASTERS\r\n", __FUNCTION__));
+    ASSERT (FALSE);
+    Status = EFI_OUT_OF_RESOURCES;
+    goto ErrorExit;
+  }
+
   mI2cPrivate[mI2cMasterCount++] = Private;
+  SlotClaimed                    = TRUE;
 
   Private->Signature                                      = TEGRA_I2C_SIGNATURE;
   Private->I2cMaster.SetBusFrequency                      = TegraI2cSetBusFrequency;
@@ -1152,7 +1160,7 @@ TegraI2CDriverBindingStart (
   Status = gDS->GetMemorySpaceDescriptor (Private->BaseAddress, &Descriptor);
   if (EFI_ERROR (Status)) {
     DEBUG ((DEBUG_ERROR, "%a: Failed to be memory descriptor\r\n", __FUNCTION__));
-    return Status;
+    goto ErrorExit;
   }
 
   Status = gDS->SetMemorySpaceAttributes (
@@ -1162,7 +1170,7 @@ TegraI2CDriverBindingStart (
                   );
   if (EFI_ERROR (Status)) {
     DEBUG ((DEBUG_ERROR, "%a: Failed to set memory as runtime\r\n", __FUNCTION__));
-    return Status;
+    goto ErrorExit;
   }
 
   // Initialize controller
@@ -1466,8 +1474,9 @@ ErrorExit:
       }
 
       FreePool (Private);
-      // remove the invalid i2c master descriptor.
-      mI2cPrivate[--mI2cMasterCount] = NULL;
+      if (SlotClaimed) {
+        mI2cPrivate[--mI2cMasterCount] = NULL;
+      }
     }
   }
 

@@ -2,7 +2,7 @@
 
   MM MCTP protocol communication
 
-  Copyright (c) 2022, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+  Copyright (c) 2022-2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
   Copyright (c) 2010 - 2019, Intel Corporation. All rights reserved.<BR>
   Copyright (c) Microsoft Corporation.<BR>
 
@@ -134,7 +134,6 @@ MctpMmSendInitialize  (
     return Status;
   }
 
-  ASSERT (Payload != NULL);
   ZeroMem (Payload, sizeof (*Payload));
 
   Status = MctpMmSendCommBuffer (PayloadSize);
@@ -189,7 +188,6 @@ MctpMmSendGetDevices  (
     return Status;
   }
 
-  ASSERT (Payload != NULL);
   ZeroMem (Payload, sizeof (*Payload));
 
   // request fields
@@ -201,7 +199,11 @@ MctpMmSendGetDevices  (
     return Status;
   }
 
-  ASSERT (Payload->Count <= MaxCount);
+  if (Payload->Count > MaxCount) {
+    DEBUG ((DEBUG_ERROR, "%a: MM returned Count %Lu > MaxCount %Lu\n", __FUNCTION__, (UINT64)Payload->Count, (UINT64)MaxCount));
+    ASSERT (FALSE);
+    return EFI_BAD_BUFFER_SIZE;
+  }
 
   // reply fields
   *Count =   Payload->Count;
@@ -249,7 +251,6 @@ MctpMmSendRecv (
     return Status;
   }
 
-  ASSERT (Payload != NULL);
   ZeroMem (Payload, sizeof (*Payload));
 
   // request fields
@@ -320,7 +321,6 @@ MctpMmSendSend (
     return Status;
   }
 
-  ASSERT (Payload != NULL);
   ZeroMem (Payload, sizeof (*Payload));
 
   // request fields
@@ -390,7 +390,6 @@ MctpMmSendDoRequest (
     return Status;
   }
 
-  ASSERT (Payload != NULL);
   ZeroMem (Payload, sizeof (*Payload));
 
   // request fields
@@ -413,10 +412,13 @@ MctpMmSendDoRequest (
     return Status;
   }
 
-  ASSERT (Payload->ResponseLength <= ResponseBufferLength);
-
   // reply fields
   *ResponseLength = Payload->ResponseLength;
+  if (Payload->ResponseLength > ResponseBufferLength) {
+    DEBUG ((DEBUG_ERROR, "%a: MM response length %Lu > buffer %Lu\n", __FUNCTION__, (UINT64)Payload->ResponseLength, (UINT64)ResponseBufferLength));
+    return EFI_BUFFER_TOO_SMALL;
+  }
+
   CopyMem (ResponseBuffer, Payload->Data, Payload->ResponseLength);
 
   return Status;
