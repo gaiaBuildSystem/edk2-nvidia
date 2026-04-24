@@ -1593,21 +1593,20 @@ FaultyFlashWriteTest (
   IN UNIT_TEST_CONTEXT  Context
   )
 {
-  UINTN  NumBytes;
+  EFI_STATUS  Status;
+  UINTN       NumBytes;
 
   NumBytes = 1;
 
   // Write tries to flush to the flash device so we should get an error
-  UT_EXPECT_ASSERT_FAILURE (
-    Private->FvbInstance.Write (
-                           &Private->FvbInstance,
-                           0,
-                           0,
-                           &NumBytes,
-                           TestBuffer
-                           ),
-    NULL
-    );
+  Status = Private->FvbInstance.Write (
+                                  &Private->FvbInstance,
+                                  0,
+                                  0,
+                                  &NumBytes,
+                                  TestBuffer
+                                  );
+  UT_ASSERT_STATUS_EQUAL (Status, EFI_DEVICE_ERROR);
 
   return UNIT_TEST_PASSED;
 }
@@ -1627,16 +1626,16 @@ FaultyFlashEraseBlocksTest (
   IN UNIT_TEST_CONTEXT  Context
   )
 {
+  EFI_STATUS  Status;
+
   // EraseBlocks tries to flush to the flash device so we should get an error
-  UT_EXPECT_ASSERT_FAILURE (
-    Private->FvbInstance.EraseBlocks (
-                           &Private->FvbInstance,
-                           (EFI_LBA)0,
-                           (UINTN)1,
-                           EFI_LBA_LIST_TERMINATOR
-                           ),
-    NULL
-    );
+  Status = Private->FvbInstance.EraseBlocks (
+                                  &Private->FvbInstance,
+                                  (EFI_LBA)0,
+                                  (UINTN)1,
+                                  EFI_LBA_LIST_TERMINATOR
+                                  );
+  UT_ASSERT_STATUS_EQUAL (Status, EFI_DEVICE_ERROR);
 
   return UNIT_TEST_PASSED;
 }
