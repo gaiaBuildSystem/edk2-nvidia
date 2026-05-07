@@ -1,7 +1,7 @@
 /** @file
   Nvidia's Configuration manager Object Descriptor Utility.
 
-  SPDX-FileCopyrightText: Copyright (c) 2023-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+  SPDX-FileCopyrightText: Copyright (c) 2023-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
   Copyright (c) 2021, ARM Limited. All rights reserved.<BR>
   SPDX-License-Identifier: BSD-2-Clause-Patent
 **/
@@ -131,6 +131,7 @@ NvAddSingleCmObj (
                               FdtParserHandle,
                               FdtParserHandle->Context,
                               &CmObjDesc,
+                              CM_NULL_TOKEN,
                               Token
                               );
   NV_ASSERT_EFI_ERROR_RETURN (Status, return Status);
@@ -293,6 +294,7 @@ NvAddMultipleCmObjWithCmObjRef (
                               FdtParserHandle,
                               FdtParserHandle->Context,
                               &CmObjRef,
+                              CM_NULL_TOKEN,
                               Token
                               );
   NV_ASSERT_EFI_ERROR_RETURN (Status, return Status);

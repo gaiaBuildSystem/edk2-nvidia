@@ -543,11 +543,17 @@ NvHwInfoAdd (
   IN        HW_INFO_PARSER_HANDLE  ParserHandle,
   IN        VOID                   *Context,
   IN  CONST CM_OBJ_DESCRIPTOR      *CmObjDesc,
+  IN  CONST CM_OBJECT_TOKEN        NewToken,
   OUT       CM_OBJECT_TOKEN        *TokenPtr OPTIONAL
   )
 {
   EFI_STATUS       Status;
   CM_OBJECT_TOKEN  LocalToken;
+
+  // NewToken (caller-pre-allocated token) is not yet plumbed through
+  // Repo->NewEntry; upstream parsers pass CM_NULL_TOKEN today.  Assert
+  // the expectation so we hear about it if upstream ever changes.
+  NV_ASSERT_RETURN (NewToken == CM_NULL_TOKEN, return EFI_UNSUPPORTED, "%a: NewToken pre-allocation not supported\n", __FUNCTION__);
 
   LocalToken = CM_NULL_TOKEN;
 

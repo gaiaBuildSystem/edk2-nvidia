@@ -1,6 +1,6 @@
 /** @file
 
-  SPDX-FileCopyrightText: Copyright (c) 2023-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+  SPDX-FileCopyrightText: Copyright (c) 2023-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 
   SPDX-License-Identifier: BSD-2-Clause-Patent
 **/
@@ -256,6 +256,7 @@ NvHwInfoAdd (
   IN        HW_INFO_PARSER_HANDLE  ParserHandle,
   IN        VOID                   *Context,
   IN  CONST CM_OBJ_DESCRIPTOR      *CmObjDesc,
+  IN  CONST CM_OBJECT_TOKEN        NewToken,
   OUT       CM_OBJECT_TOKEN        *TokenPtr OPTIONAL
   );
 
