@@ -962,6 +962,17 @@ CONFIG_FMP_CERTIFICATES_DTB_MAX_SIZE=0
 !endif
 
   #
+  # Enable AvbLib factory-flash unlock-state reset (T23X Android only).
+  # Same Kconfig gating as the previous AVB_ENABLE_FACTORY_UNLOCK_RESET=1
+  # CC flag; default in NVIDIA.dec is FALSE so all other configs no-op.
+  #
+!ifdef CONFIG_BUILD_ANDROID
+!ifdef CONFIG_SOC_T23X
+  gNVIDIATokenSpaceGuid.PcdAvbEnableFactoryUnlockReset|TRUE
+!endif
+!endif
+
+  #
   # Variable Services PCDs.
   #
   gEfiMdeModulePkgTokenSpaceGuid.PcdMaxVariableSize|0x2000

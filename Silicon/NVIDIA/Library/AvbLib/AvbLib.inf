@@ -75,6 +75,7 @@
   AvbOpteeInterfaceLib
   PerformanceLib
   AndroidBcbLib
+  IoLib
 
 [Guids]
   gFdtTableGuid
@@ -85,6 +86,9 @@
   gEfiDiskIoProtocolGuid
   gNVIDIABootConfigUpdateProtocol
   gNVIDIAAvbUiProtocolGuid           ## CONSUMES
+
+[FixedPcd]
+  gNVIDIATokenSpaceGuid.PcdAvbEnableFactoryUnlockReset
 
 [BuildOptions]
   GCC:*_*_*_CC_FLAGS = -DAVB_COMPILATION -DAVB_ENABLE_DEBUG

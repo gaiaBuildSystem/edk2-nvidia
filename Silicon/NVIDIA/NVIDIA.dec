@@ -548,6 +548,13 @@
 #T26x CPUBL params TEGRABL_MAX_SOCKETS
   gNVIDIATokenSpaceGuid.PcdT26xCpublSocketCount|2|UINT8|0x000000B1
 
+# Enable the factory-flash AVB unlock-state reset path in AvbLib (T23X / Android).
+# When TRUE, AvbVerifyBoot reads the platform scratch register on first boot
+# (when the AVB TA has no persisted lock state) and seeds the TA with the
+# factory-programmed lock state. When FALSE, the scratch register is ignored
+# and AvbApplyFactoryUnlockReset / its helpers are not compiled in.
+  gNVIDIATokenSpaceGuid.PcdAvbEnableFactoryUnlockReset|FALSE|BOOLEAN|0x000000B6
+
 [PcdsFeatureFlag]
 #OPTEE presence
   gNVIDIATokenSpaceGuid.PcdOpteePresent|FALSE|BOOLEAN|0x00000067

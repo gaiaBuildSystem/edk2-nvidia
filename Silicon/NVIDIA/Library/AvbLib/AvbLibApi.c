@@ -25,6 +25,7 @@
 #include <Library/OpteeNvLib.h>
 #include <Library/AndroidBcbLib.h>
 #include <Library/FdtLib.h>
+#include <Library/IoLib.h>
 
 #include <Protocol/PartitionInfo.h>
 #include <Protocol/BlockIo.h>
@@ -42,6 +43,36 @@
 
 #define MAX_SN_LEN              32
 #define PatchLevelStrFormatLen  10
+
+//
+// Build-time switch for the factory-flash AVB unlock-state reset override.
+// Driven by gNVIDIATokenSpaceGuid.PcdAvbEnableFactoryUnlockReset (default
+// FALSE in NVIDIA.dec, overridden to TRUE in NVIDIA.common.dsc.inc under
+// CONFIG_BUILD_ANDROID && CONFIG_SOC_T23X).
+//   TRUE  = enable: read the platform scratch register at the start of
+//           AvbVerifyBoot and, when the reset-request bit is set, sync the
+//           AVB TA lock state to match the register.
+//   FALSE = disable: AvbVerifyBoot ignores the scratch register entirely
+//           and AvbApplyFactoryUnlockReset / its helpers are not compiled.
+//
+#if FixedPcdGetBool (PcdAvbEnableFactoryUnlockReset)
+//
+// Factory-flash seed for the AVB device unlock state (T234 only).
+//
+// SCRATCH_SECURE_RSV103_SCRATCH_0 is programmed during factory flash to
+// convey the initial unlock state to the bootloader:
+//   bit 1 (BIT1): 1 = locked, 0 = unlocked.
+//
+// The bit is consulted only on first boot, when the AVB TA has no persisted
+// lock state yet (AvbReadDeviceLockedState returns EFI_NOT_FOUND). Once the
+// AVB TA holds a value -- whether seeded from here or written by fastboot --
+// it is treated as authoritative and this register is ignored.
+//
+#define T234_SCRATCH_BASE                            0x0C390000
+#define SCRATCH_SECURE_RSV103_SCRATCH_0_OFFSET       0x39C
+#define SCRATCH_SECURE_RSV103_SCRATCH_0_ADDR         (T234_SCRATCH_BASE + SCRATCH_SECURE_RSV103_SCRATCH_0_OFFSET)
+#define SCRATCH_SECURE_RSV103_UNLOCK_LOCK_STATE_BIT  BIT1
+#endif
 
 STATIC EFI_HANDLE      mControllerHandle;
 STATIC AVB_BOOT_STATE  mAvbBootState = VERIFIED_BOOT_UNKNOWN_STATE;
@@ -108,13 +139,136 @@ AvbWriteDeviceLockedState (
   return EFI_SUCCESS;
 }
 
+#if FixedPcdGetBool (PcdAvbEnableFactoryUnlockReset)
+
+/**
+  Read the factory-flash-encoded target lock state from the platform scratch
+  register.
+
+  SCRATCH_SECURE_RSV103_SCRATCH_0 bit 1 holds the target lock state
+  programmed by the factory flash tool (1 = locked, 0 = unlocked). The read
+  is non-destructive; the register is only consulted when the AVB TA has no
+  persisted state yet, so the bit acts as a one-time seed.
+
+  @return  TRUE if the factory wants the device locked, FALSE if unlocked.
+**/
+STATIC
+BOOLEAN
+AvbReadFactoryLockStateFromScratch (
+  VOID
+  )
+{
+  UINT32   Value;
+  BOOLEAN  IsLocked;
+
+  Value    = MmioRead32 (SCRATCH_SECURE_RSV103_SCRATCH_0_ADDR);
+  IsLocked = ((Value & SCRATCH_SECURE_RSV103_UNLOCK_LOCK_STATE_BIT) != 0);
+
+  DEBUG ((
+    DEBUG_ERROR,
+    "%a: SCRATCH_SECURE_RSV103_SCRATCH_0 (0x%lx) = 0x%08x, factory target=%a\n",
+    __FUNCTION__,
+    (UINT64)SCRATCH_SECURE_RSV103_SCRATCH_0_ADDR,
+    Value,
+    IsLocked ? "locked" : "unlocked"
+    ));
+
+  return IsLocked;
+}
+
+/**
+  Seed the AVB TA lock state from the factory-flash scratch register on
+  first boot.
+
+  Strategy:
+    1. Probe the AVB TA via AvbReadDeviceLockedState.
+    2. If it returns success, the TA already holds an authoritative value
+       (either a previous factory seed or a fastboot lock/unlock); do not
+       overwrite it.
+    3. If it returns EFI_NOT_FOUND, the TA has no state yet (fresh factory
+       flash or RPMB wipe). Read SCRATCH_SECURE_RSV103_SCRATCH_0 bit 1 and
+       write it back so subsequent AvbReadDeviceLockedState calls return
+       the factory-provisioned value.
+    4. On any other error, surface it; we do not want to mask TA failures
+       with a scratch-derived guess.
+
+  @retval EFI_SUCCESS  TA already had a state, or the factory state was
+                       written successfully.
+  @retval Others       TA read failed for a reason other than NOT_FOUND,
+                       or the factory state could not be written.
+**/
+STATIC
+EFI_STATUS
+AvbApplyFactoryUnlockReset (
+  VOID
+  )
+{
+  BOOLEAN     CurrentLocked    = FALSE;
+  BOOLEAN     FactoryLockState = FALSE;
+  EFI_STATUS  Status;
+
+  Status = AvbReadDeviceLockedState (&CurrentLocked);
+  if (!EFI_ERROR (Status)) {
+    DEBUG ((
+      DEBUG_ERROR,
+      "%a: AVB TA already holds lock state (%a); skipping factory seed\n",
+      __FUNCTION__,
+      CurrentLocked ? "locked" : "unlocked"
+      ));
+    return EFI_SUCCESS;
+  }
+
+  if (Status != EFI_NOT_FOUND) {
+    DEBUG ((
+      DEBUG_ERROR,
+      "%a: Got %r reading AVB TA lock state; not seeding from scratch\n",
+      __FUNCTION__,
+      Status
+      ));
+    return Status;
+  }
+
+  FactoryLockState = AvbReadFactoryLockStateFromScratch ();
+
+  Status = AvbWriteDeviceLockedState (FactoryLockState);
+  if (EFI_ERROR (Status)) {
+    DEBUG ((
+      DEBUG_ERROR,
+      "%a: Got %r writing factory lock state (%a) to AVB TA\n",
+      __FUNCTION__,
+      Status,
+      FactoryLockState ? "locked" : "unlocked"
+      ));
+    return Status;
+  }
+
+  DEBUG ((
+    DEBUG_ERROR,
+    "%a: seeded AVB TA lock state from factory scratch (target=%a)\n",
+    __FUNCTION__,
+    FactoryLockState ? "locked" : "unlocked"
+    ));
+  return EFI_SUCCESS;
+}
+
+#endif // FixedPcdGetBool (PcdAvbEnableFactoryUnlockReset)
+
 /**
   Read tamper-evident storage, parse device unlocked state.
+
+  Pure read path: defers seeding a missing AVB TA state to
+  AvbApplyFactoryUnlockReset (which runs once during AvbVerifyBoot, before
+  this callback is invoked by libavb), so EFI_NOT_FOUND is surfaced to the
+  caller as AVB_IO_RESULT_ERROR_NO_SUCH_VALUE rather than silently coerced
+  to "locked". This keeps the TA the single source of truth and avoids a
+  double-write race with the factory seed path.
 
   @param[in]  Ops         A pointer to the AvbOps struct.
   @param[out] IsUnlocked  True if device is unlocked.
 
-  @retval AVB_IO_RESULT_OK  The operation completed successfully.
+  @retval AVB_IO_RESULT_OK                  Successfully read the state.
+  @retval AVB_IO_RESULT_ERROR_NO_SUCH_VALUE TA has no persisted state.
+  @retval AVB_IO_RESULT_ERROR_IO            Other TA read failure.
 
 **/
 STATIC
@@ -124,35 +278,17 @@ ReadIsDeviceUnlocked (
   OUT bool    *IsUnlocked
   )
 {
-  EFI_STATUS   Status       = EFI_SUCCESS;
-  AvbIOResult  AvbResult    = AVB_IO_RESULT_OK;
-  BOOLEAN      DeviceLocked = FALSE;
+  EFI_STATUS  Status;
+  BOOLEAN     DeviceLocked = FALSE;
 
   Status = AvbReadDeviceLockedState (&DeviceLocked);
   if (EFI_ERROR (Status)) {
     DEBUG ((DEBUG_ERROR, "%a: Got %r trying to read locked state from AVB TA\n", __FUNCTION__, Status));
-    AvbResult = (Status == EFI_NOT_FOUND) ? AVB_IO_RESULT_ERROR_NO_SUCH_VALUE : AVB_IO_RESULT_ERROR_IO;
-  }
-
-  // If locked state not found, setting as locked by default
-  if (AvbResult == AVB_IO_RESULT_ERROR_NO_SUCH_VALUE) {
-    Status = AvbWriteDeviceLockedState (TRUE);
-    if (EFI_ERROR (Status)) {
-      DEBUG ((DEBUG_ERROR, "%a: Got %r trying to write locked state from AVB TA\n", __FUNCTION__, Status));
-      AvbResult = AVB_IO_RESULT_ERROR_IO;
-      goto Exit;
-    }
-
-    DeviceLocked = TRUE;
-    AvbResult    = AVB_IO_RESULT_OK;
-  } else if (AvbResult != AVB_IO_RESULT_OK) {
-    goto Exit;
+    return (Status == EFI_NOT_FOUND) ? AVB_IO_RESULT_ERROR_NO_SUCH_VALUE : AVB_IO_RESULT_ERROR_IO;
   }
 
   *IsUnlocked = (DeviceLocked == FALSE) ? TRUE : FALSE;
-
-Exit:
-  return AvbResult;
+  return AVB_IO_RESULT_OK;
 }
 
 /**
@@ -1131,6 +1267,19 @@ AvbVerifyBoot (
     DEBUG ((DEBUG_ERROR, "%a:Avb OP-TEE initialization failed with %r\n", __func__, Status));
     goto Exit;
   }
+
+ #if FixedPcdGetBool (PcdAvbEnableFactoryUnlockReset)
+  // Seed the AVB TA lock state from the factory scratch register if the TA
+  // has none yet. Must run before AVB verify consults the TA via
+  // ReadIsDeviceUnlocked; otherwise libavb would observe NO_SUCH_VALUE and
+  // fall back to its conservative default.
+  Status = AvbApplyFactoryUnlockReset ();
+  if (EFI_ERROR (Status)) {
+    DEBUG ((DEBUG_ERROR, "%a: Factory unlock-state seed failed with %r\n", __func__, Status));
+    goto Exit;
+  }
+
+ #endif
 
   Status = VerifiedBootGetBootState (IsRecovery, &BootState, &SlotData);
   if (EFI_ERROR (Status)) {
