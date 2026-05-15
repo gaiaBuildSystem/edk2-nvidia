@@ -150,24 +150,35 @@ EnableClocks (
     "aza_bit_clk",
     NULL
   };
-  STATIC CONST CHAR8 *CONST  ClockParents[][2] = {
+  STATIC CONST CHAR8 *CONST  EnableClockParents[][2] = {
     { "nvdisplay_disp_clk", "disp_root"          },
     { "disp_root",          "disppll_clk"        },
     { "nvdisplayhub_clk",   "hub_root"           },
     { "hub_root",           "sppll0_clkoutb_clk" },
     { NULL,                 NULL                 }
   };
+  STATIC CONST CHAR8 *CONST  DisableClockParents[][2] = {
+    { "rg0_clk",      "osc_clk" },
+    { "sor0_clk",     "osc_clk" },
+    { "sor0_ref_clk", "osc_clk" },
+    { NULL,           NULL      }
+  };
 
   EFI_STATUS  Status;
 
   if (Enable) {
-    Status = NvDisplaySetClockParents (DriverHandle, ControllerHandle, ClockParents);
+    Status = NvDisplaySetClockParents (DriverHandle, ControllerHandle, EnableClockParents);
     if (EFI_ERROR (Status)) {
       return Status;
     }
 
     return NvDisplayEnableClocks (DriverHandle, ControllerHandle, Clocks);
   } else {
+    Status = NvDisplaySetClockParents (DriverHandle, ControllerHandle, DisableClockParents);
+    if (EFI_ERROR (Status)) {
+      return Status;
+    }
+
     return NvDisplayDisableAllClocks (DriverHandle, ControllerHandle);
   }
 }
