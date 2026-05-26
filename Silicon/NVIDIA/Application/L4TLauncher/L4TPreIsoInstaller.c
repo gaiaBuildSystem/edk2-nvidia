@@ -1903,9 +1903,8 @@ GeneratePlatformSpecString (
 }
 
 /**
-  Generate TegraPlatformCompatSpec string from board information.
+  Generate TegraPlatformCompatSpec string from cached TegraPlatformSpec fields.
 
-  @param[in]  BoardInfo         Pointer to board information from EEPROM.
   @param[out] CompatSpecString  Buffer to store the generated compat spec string.
   @param[in]  BufferSize        Size of the buffer.
 
@@ -1917,22 +1916,21 @@ STATIC
 EFI_STATUS
 EFIAPI
 GeneratePlatformCompatSpecString (
-  IN  CONST TEGRA_EEPROM_BOARD_INFO  *BoardInfo,
-  OUT CHAR8                          *CompatSpecString,
-  IN  UINTN                          BufferSize
+  OUT CHAR8  *CompatSpecString,
+  IN  UINTN  BufferSize
   )
 {
-  CONST EEPROM_PART_NUMBER  *EepromPartNumber;
-  CHAR8                     BoardIdStr[5];
-  CHAR8                     SkuStr[5];
-  CHAR8                     FabStr[4];
-  UINT32                    BoardId;
-  UINT32                    BoardSku;
-  CONST CHAR8               *BoardName;
-  CONST CHAR8               *CompatFab;
-  UINTN                     SpecLen;
+  UINT32       BoardId;
+  UINT32       BoardSku;
+  CONST CHAR8  *BoardFab;
+  CONST CHAR8  *BoardName;
+  CONST CHAR8  *UnusedBoardName;
+  CONST CHAR8  *CompatFab;
+  UINTN        SpecLen;
+  UINTN        CompatFabLen;
+  UINTN        BoardNameLen;
 
-  if ((BoardInfo == NULL) || (CompatSpecString == NULL)) {
+  if (CompatSpecString == NULL) {
     return EFI_INVALID_PARAMETER;
   }
 
@@ -1940,63 +1938,32 @@ GeneratePlatformCompatSpecString (
     return EFI_BUFFER_TOO_SMALL;
   }
 
-  EepromPartNumber = (EEPROM_PART_NUMBER *)&BoardInfo->ProductId[0];
+  BoardId   = mTegraPlatformSpec.mBoardId;
+  BoardSku  = mTegraPlatformSpec.mBoardSku;
+  BoardFab  = mTegraPlatformSpec.mBoardFab;
+  BoardName = mTegraPlatformSpec.mBoardName;
 
-  if (!IsTegraBoardFormat (EepromPartNumber)) {
-    PreIsoLogPrint (L"%a: Non-Tegra EEPROM format, cannot generate compat spec string\r\n", __FUNCTION__);
-    return EFI_UNSUPPORTED;
-  }
-
-  BoardIdStr[0] = (CHAR8)EepromPartNumber->TegraEepromPartNumber.Id[0];
-  BoardIdStr[1] = (CHAR8)EepromPartNumber->TegraEepromPartNumber.Id[1];
-  BoardIdStr[2] = (CHAR8)EepromPartNumber->TegraEepromPartNumber.Id[2];
-  BoardIdStr[3] = (CHAR8)EepromPartNumber->TegraEepromPartNumber.Id[3];
-  BoardIdStr[4] = '\0';
-
-  SkuStr[0] = (CHAR8)EepromPartNumber->TegraEepromPartNumber.Sku[0];
-  SkuStr[1] = (CHAR8)EepromPartNumber->TegraEepromPartNumber.Sku[1];
-  SkuStr[2] = (CHAR8)EepromPartNumber->TegraEepromPartNumber.Sku[2];
-  SkuStr[3] = (CHAR8)EepromPartNumber->TegraEepromPartNumber.Sku[3];
-  SkuStr[4] = '\0';
-
-  FabStr[0] = (CHAR8)EepromPartNumber->TegraEepromPartNumber.Fab[0];
-  FabStr[1] = (CHAR8)EepromPartNumber->TegraEepromPartNumber.Fab[1];
-  FabStr[2] = (CHAR8)EepromPartNumber->TegraEepromPartNumber.Fab[2];
-  FabStr[3] = '\0';
-
-  BoardId  = 0;
-  BoardSku = 0;
-  if ((BoardIdStr[0] >= '0') && (BoardIdStr[0] <= '9') &&
-      (BoardIdStr[1] >= '0') && (BoardIdStr[1] <= '9') &&
-      (BoardIdStr[2] >= '0') && (BoardIdStr[2] <= '9') &&
-      (BoardIdStr[3] >= '0') && (BoardIdStr[3] <= '9'))
+  if ((BoardFab[0] == '\0') || (BoardFab[1] == '\0') ||
+      (BoardFab[2] == '\0') || (BoardName[0] == '\0'))
   {
-    BoardId = (BoardIdStr[0] - '0') * 1000 +
-              (BoardIdStr[1] - '0') * 100 +
-              (BoardIdStr[2] - '0') * 10 +
-              (BoardIdStr[3] - '0');
+    return EFI_INVALID_PARAMETER;
   }
 
-  if ((SkuStr[0] >= '0') && (SkuStr[0] <= '9') &&
-      (SkuStr[1] >= '0') && (SkuStr[1] <= '9') &&
-      (SkuStr[2] >= '0') && (SkuStr[2] <= '9') &&
-      (SkuStr[3] >= '0') && (SkuStr[3] <= '9'))
-  {
-    BoardSku = (SkuStr[0] - '0') * 1000 +
-               (SkuStr[1] - '0') * 100 +
-               (SkuStr[2] - '0') * 10 +
-               (SkuStr[3] - '0');
-  }
-
-  ResolveCompatSpecParams (BoardId, BoardSku, FabStr, &BoardName, &CompatFab);
+  ResolveCompatSpecParams (
+    BoardId,
+    BoardSku,
+    BoardFab,
+    &UnusedBoardName,
+    &CompatFab
+    );
 
   SpecLen = AsciiSPrint (
               CompatSpecString,
               BufferSize,
-              "%a-%a-%a--1--%a-",
-              BoardIdStr,
+              "%04u-%a-%04u--1--%a-",
+              BoardId,
               CompatFab,
-              SkuStr,
+              BoardSku,
               BoardName
               );
 
@@ -2004,6 +1971,24 @@ GeneratePlatformCompatSpecString (
     PreIsoLogPrint (L"%a: Compat spec string truncated or empty\r\n", __FUNCTION__);
     return EFI_DEVICE_ERROR;
   }
+
+  CompatFabLen = AsciiStrLen (CompatFab);
+  if (CompatFabLen >= sizeof (mTegraPlatformCompatSpec.mBoardFab)) {
+    return EFI_BUFFER_TOO_SMALL;
+  }
+
+  BoardNameLen = AsciiStrLen (BoardName);
+  if (BoardNameLen >= sizeof (mTegraPlatformCompatSpec.mBoardName)) {
+    return EFI_BUFFER_TOO_SMALL;
+  }
+
+  ZeroMem (&mTegraPlatformCompatSpec, sizeof (mTegraPlatformCompatSpec));
+  mTegraPlatformCompatSpec.mBoardId = BoardId;
+  CopyMem (mTegraPlatformCompatSpec.mBoardFab, CompatFab, CompatFabLen);
+  mTegraPlatformCompatSpec.mBoardFab[CompatFabLen] = '\0';
+  mTegraPlatformCompatSpec.mBoardSku               = BoardSku;
+  CopyMem (mTegraPlatformCompatSpec.mBoardName, BoardName, BoardNameLen);
+  mTegraPlatformCompatSpec.mBoardName[BoardNameLen] = '\0';
 
   return EFI_SUCCESS;
 }
@@ -2203,46 +2188,29 @@ EnsurePlatformSpecVariables (
   CHAR8       CompatSpecString[MAX_SPEC_STRING_LEN];
   UINTN       DataSize;
   BOOLEAN     SpecExists;
-  BOOLEAN     CompatSpecExists;
+  BOOLEAN     GenCompatSpec;
 
   if (BoardInfo == NULL) {
     PreIsoLogPrint (L"%a: BoardInfo is NULL\r\n", __FUNCTION__);
     return EFI_INVALID_PARAMETER;
   }
 
-  DataSize   = sizeof (SpecString) - 1;
-  SpecExists = FALSE;
-  Status     = gRT->GetVariable (
-                      TEGRA_PLATFORM_SPEC_VARIABLE_NAME,
-                      &gNVIDIAPublicVariableGuid,
-                      NULL,
-                      &DataSize,
-                      SpecString
-                      );
+  DataSize      = sizeof (SpecString) - 1;
+  SpecExists    = FALSE;
+  GenCompatSpec = FALSE;
+  Status        = gRT->GetVariable (
+                         TEGRA_PLATFORM_SPEC_VARIABLE_NAME,
+                         &gNVIDIAPublicVariableGuid,
+                         NULL,
+                         &DataSize,
+                         SpecString
+                         );
   if (!EFI_ERROR (Status)) {
     SpecString[DataSize] = '\0';
     SpecExists           = TRUE;
     PreIsoLogWrite (L"%a: TegraPlatformSpec exists: %a\r\n", __FUNCTION__, SpecString);
   } else if (Status != EFI_NOT_FOUND) {
     PreIsoLogPrint (L"%a: Error reading TegraPlatformSpec: %r\r\n", __FUNCTION__, Status);
-    return Status;
-  }
-
-  DataSize         = sizeof (CompatSpecString) - 1;
-  CompatSpecExists = FALSE;
-  Status           = gRT->GetVariable (
-                            TEGRA_PLATFORM_COMPAT_SPEC_VARIABLE_NAME,
-                            &gNVIDIAPublicVariableGuid,
-                            NULL,
-                            &DataSize,
-                            CompatSpecString
-                            );
-  if (!EFI_ERROR (Status)) {
-    CompatSpecString[DataSize] = '\0';
-    CompatSpecExists           = TRUE;
-    PreIsoLogWrite (L"%a: TegraPlatformCompatSpec exists: %a\r\n", __FUNCTION__, CompatSpecString);
-  } else if (Status != EFI_NOT_FOUND) {
-    PreIsoLogPrint (L"%a: Error reading TegraPlatformCompatSpec: %r\r\n", __FUNCTION__, Status);
     return Status;
   }
 
@@ -2266,10 +2234,40 @@ EnsurePlatformSpecVariables (
     }
 
     PreIsoLogWrite (L"%a: Created TegraPlatformSpec: %a\r\n", __FUNCTION__, SpecString);
+
+    // Generate TegraPlatformCompatSpec if TegraPlatformSpec is newly created
+    GenCompatSpec = TRUE;
   }
 
-  if (!CompatSpecExists) {
-    Status = GeneratePlatformCompatSpecString (BoardInfo, CompatSpecString, sizeof (CompatSpecString));
+  Status = ParseTegraPlatformSpec (SpecString, &mTegraPlatformSpec);
+  if (EFI_ERROR (Status)) {
+    PreIsoLogPrint (L"%a: Failed to cache TegraPlatformSpec: %r\r\n", __FUNCTION__, Status);
+    return Status;
+  }
+
+  DataSize = sizeof (CompatSpecString) - 1;
+  Status   = gRT->GetVariable (
+                    TEGRA_PLATFORM_COMPAT_SPEC_VARIABLE_NAME,
+                    &gNVIDIAPublicVariableGuid,
+                    NULL,
+                    &DataSize,
+                    CompatSpecString
+                    );
+  if (!EFI_ERROR (Status)) {
+    CompatSpecString[DataSize] = '\0';
+    PreIsoLogWrite (L"%a: TegraPlatformCompatSpec exists: %a\r\n", __FUNCTION__, CompatSpecString);
+  } else if (Status == EFI_NOT_FOUND) {
+    GenCompatSpec = TRUE;
+  } else {
+    PreIsoLogPrint (L"%a: Error reading TegraPlatformCompatSpec: %r\r\n", __FUNCTION__, Status);
+    return Status;
+  }
+
+  if (GenCompatSpec) {
+    Status = GeneratePlatformCompatSpecString (
+               CompatSpecString,
+               sizeof (CompatSpecString)
+               );
     if (EFI_ERROR (Status)) {
       PreIsoLogPrint (L"%a: Failed to generate TegraPlatformCompatSpec: %r\r\n", __FUNCTION__, Status);
       return Status;
@@ -2287,13 +2285,7 @@ EnsurePlatformSpecVariables (
       return Status;
     }
 
-    PreIsoLogWrite (L"%a: Created TegraPlatformCompatSpec: %a\r\n", __FUNCTION__, CompatSpecString);
-  }
-
-  Status = ParseTegraPlatformSpec (SpecString, &mTegraPlatformSpec);
-  if (EFI_ERROR (Status)) {
-    PreIsoLogPrint (L"%a: Failed to cache TegraPlatformSpec: %r\r\n", __FUNCTION__, Status);
-    return Status;
+    PreIsoLogWrite (L"%a: Updated TegraPlatformCompatSpec: %a\r\n", __FUNCTION__, CompatSpecString);
   }
 
   Status = ParseTegraPlatformSpec (CompatSpecString, &mTegraPlatformCompatSpec);

@@ -132,9 +132,12 @@ If no update is needed, `PreIsoCapsuleStaged` is deleted and shim boot continues
 
 ## Platform Spec Variables
 
-PreIsoInstaller ensures the following NVRAM variables exist. It creates them
-from Tegra-format EEPROM data and the root DTB `compatible` property when they
-are missing. Existing variables are not overwritten:
+PreIsoInstaller ensures the following NVRAM variables exist. It creates
+`TegraPlatformSpec` from Tegra-format EEPROM data and the root DTB
+`compatible` property when `TegraPlatformSpec` is missing.
+`TegraPlatformCompatSpec` is generated from the cached `TegraPlatformSpec`
+fields and rewritten when it is missing or when `TegraPlatformSpec` was newly
+created:
 
 - **TegraPlatformSpec**: `<BoardId>-<FAB>-<SKU>-<Rev>.0-1-2-<BoardName>-`
 - **TegraPlatformCompatSpec**: `<BoardId>-<CompatFAB>-<SKU>--1--<BoardName>-`
@@ -142,8 +145,9 @@ are missing. Existing variables are not overwritten:
 These variables are consumed by downstream boot components for platform
 identification.
 
-When PreIsoInstaller synthesizes these variables, the base board name and
-compatible FAB are resolved from EEPROM data as follows:
+When PreIsoInstaller creates `TegraPlatformSpec` or derives
+`TegraPlatformCompatSpec`, the base board name and compatible FAB are
+resolved as follows:
 
 | Board ID | SKU | BoardName | CompatFAB |
 |----------|-----|-----------|-----------|
@@ -160,8 +164,8 @@ compatible FAB are resolved from EEPROM data as follows:
 ### DT compatible variant board names
 
 Variants that cannot be distinguished from EEPROM SKU/FAB alone are detected
-from the root DTB `compatible` property when PreIsoInstaller synthesizes
-`TegraPlatformSpec` and `TegraPlatformCompatSpec`.
+from the root DTB `compatible` property when PreIsoInstaller creates
+`TegraPlatformSpec` and derives `TegraPlatformCompatSpec`.
 
 The `DTB compatible match` column shows the raw token in the DTB compatible
 property. The generated `TegraPlatformCompatSpec` stores the full BoardName
@@ -178,11 +182,11 @@ For Orin Nano, NanoE8GB has base and Super variants.
 
 ## Capsule File Selection
 
-`EnsurePlatformSpecVariables()` reads or generates `TegraPlatformCompatSpec`
-before capsule selection and stores its board ID, CompatFAB, SKU, and BoardName
-fields. `SelectCapsuleFile()` uses those cached fields directly. It does not
-read CVM EEPROM or reread the NVRAM variable for capsule selection. The
-expected format is:
+`EnsurePlatformSpecVariables()` reads `TegraPlatformCompatSpec`, regenerates
+and rewrites it only when required, then stores its board ID, CompatFAB, SKU,
+and BoardName fields in the cached compat-spec structure. `SelectCapsuleFile()`
+uses those cached fields directly. It does not read CVM EEPROM or reread the
+NVRAM variable for capsule selection. The expected format is:
 
 ```
 <BoardId>-<CompatFAB>-<SKU>--1--<BoardName>-
