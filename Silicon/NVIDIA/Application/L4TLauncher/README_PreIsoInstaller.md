@@ -178,37 +178,40 @@ For Orin Nano, NanoE8GB has base and Super variants.
 
 ## Capsule File Selection
 
-The capsule file is selected based on board ID, SKU, FAB from the CVM EEPROM,
-and the `TegraPlatformCompatSpec` board name. That variable can be an existing
-platform variable or one synthesized by PreIsoInstaller from EEPROM plus the
-root DTB `compatible` property:
+`EnsurePlatformSpecVariables()` reads or generates `TegraPlatformCompatSpec`
+before capsule selection and stores its board ID, CompatFAB, SKU, and BoardName
+fields. `SelectCapsuleFile()` uses those cached fields directly. It does not
+read CVM EEPROM or reread the NVRAM variable for capsule selection. The
+expected format is:
 
-| Board ID | SKU     | TegraPlatformCompatSpec board name      | Capsule File                          |
-|----------|---------|-----------------------------------------|---------------------------------------|
-| 3701     | any     | contains `super`                        | TEGRA_BL_3701_agx_super.Cap           |
-| 3701     | 4, 5    | otherwise                               | TEGRA_BL_3701_agx.Cap                 |
-| 3701     | 8       | otherwise                               | TEGRA_BL_3701_agx_ind.Cap             |
-| 3701     | 0       | otherwise (FAB == 300)                  | TEGRA_BL_3701_agx.Cap                 |
-| 3701     | 0       | otherwise (FAB != 300)                  | TEGRA_BL_3701_000.Cap                 |
-| 3701     | other   | otherwise                               | TEGRA_BL_3701_agx.Cap (default)       |
-| 3767     | any     | contains `jetson-orin-nanoe8gb-devkit` and `super` | TEGRA_BL_3767_nanoe8gb_super.Cap      |
-| 3767     | any     | contains `jetson-orin-nanoe8gb-devkit` (no `super`) | TEGRA_BL_3767_nanoe8gb.Cap            |
-| 3767     | any     | contains `super` (no `jetson-orin-nanoe8gb-devkit`) | TEGRA_BL_3767_super.Cap               |
-| 3767     | any     | otherwise / missing / read failure      | TEGRA_BL_3767.Cap                     |
-| 3834     | any     | any                                     | TEGRA_BL_3834_agx.Cap                 |
-| other    | any     | any                                     | TEGRA_BL_3701_agx.Cap (default)       |
-| non-Tegra EEPROM | any | any                                 | TEGRA_BL_3701_agx.Cap (default)       |
+```
+<BoardId>-<CompatFAB>-<SKU>--1--<BoardName>-
+```
 
-Capsule selection uses substring matches against the
-`TegraPlatformCompatSpec` NVRAM variable: the full board-name prefix
-`jetson-orin-nanoe8gb-devkit` (including its `-super` form) and `super`
-(matches any `-super` board name). When `TegraPlatformCompatSpec` cannot be
-read, capsule selection falls back to the non-variant default for that board
-(e.g., `TEGRA_BL_3701_agx.Cap` for AGX Orin SKU 4, `TEGRA_BL_3767.Cap` for
-Orin Nano).
+Board ID, SKU, and CompatFAB drive the base capsule choice. The parsed
+BoardName is used only for variant checks such as NanoE8GB and Super:
 
-For boards with alphabetic FAB strings (e.g., `T00`, `EB9`), FAB is treated
-as 0 for capsule selection purposes. Capsule files are copied from `EFI\` to
+| Parsed Board ID | Parsed SKU | Parsed BoardName condition                     | Capsule File                     |
+|-----------------|------------|------------------------------------------------|----------------------------------|
+| 3701            | any        | contains `super`                               | TEGRA_BL_3701_agx_super.Cap      |
+| 3701            | 4, 5       | otherwise                                      | TEGRA_BL_3701_agx.Cap            |
+| 3701            | 8          | otherwise                                      | TEGRA_BL_3701_agx_ind.Cap        |
+| 3701            | 0          | otherwise, and parsed CompatFAB == 300         | TEGRA_BL_3701_agx.Cap            |
+| 3701            | 0          | otherwise, and parsed CompatFAB != 300         | TEGRA_BL_3701_000.Cap            |
+| 3701            | other      | otherwise                                      | TEGRA_BL_3701_agx.Cap (default)  |
+| 3767            | any        | contains `jetson-orin-nanoe8gb-devkit` and `super` | TEGRA_BL_3767_nanoe8gb_super.Cap |
+| 3767            | any        | contains `jetson-orin-nanoe8gb-devkit` only    | TEGRA_BL_3767_nanoe8gb.Cap       |
+| 3767            | any        | contains `super` only                          | TEGRA_BL_3767_super.Cap          |
+| 3767            | any        | otherwise                                      | TEGRA_BL_3767.Cap                |
+| 3834            | any        | any                                            | TEGRA_BL_3834_agx.Cap            |
+| other           | any        | any                                            | TEGRA_BL_3701_agx.Cap (default)  |
+
+If the cached `TegraPlatformCompatSpec` fields are unavailable or cannot be
+parsed, capsule selection falls back to `TEGRA_BL_3701_agx.Cap`.
+
+BoardName matching is done against the parsed BoardName field, not the full
+CompatSpec string. `jetson-orin-nanoe8gb-devkit` identifies NanoE8GB, and
+`super` identifies Super board names. Capsule files are copied from `EFI\` to
 `EFI\UpdateCapsule\`; the destination directory is created if needed.
 
 ## Boot-Loop Guard
