@@ -34,7 +34,17 @@
 
 #define LOG_LINE_MAX  512
 
+typedef struct {
+  UINT32    mBoardId;
+  CHAR8     mBoardFab[4];
+  UINT32    mBoardSku;
+  CHAR8     mBoardName[MAX_SPEC_STRING_LEN];
+} TegraPlatformSpecInfo;
+
 STATIC EFI_FILE_HANDLE  mLogFileHandle = NULL;
+
+STATIC TegraPlatformSpecInfo  mTegraPlatformSpec;
+STATIC TegraPlatformSpecInfo  mTegraPlatformCompatSpec;
 
 VOID
 EFIAPI
@@ -1345,6 +1355,53 @@ IsTegraBoardFormat (
 }
 
 /**
+  Parse an unsigned decimal ASCII field.
+
+  @param[in]  Field     Pointer to the field.
+  @param[in]  FieldLen  Length of the field in bytes.
+  @param[out] Value     Parsed UINT32 value.
+
+  @retval EFI_SUCCESS           Value parsed successfully.
+  @retval EFI_INVALID_PARAMETER Invalid parameters or non-decimal field.
+  @retval EFI_BAD_BUFFER_SIZE   Parsed value exceeds UINT32.
+
+**/
+STATIC
+EFI_STATUS
+EFIAPI
+ParseAsciiUint32Field (
+  IN  CONST CHAR8  *Field,
+  IN  UINTN        FieldLen,
+  OUT UINT32       *Value
+  )
+{
+  UINTN   Index;
+  UINT32  ParsedValue;
+  UINT32  Digit;
+
+  if ((Field == NULL) || (FieldLen == 0) || (Value == NULL)) {
+    return EFI_INVALID_PARAMETER;
+  }
+
+  ParsedValue = 0;
+  for (Index = 0; Index < FieldLen; Index++) {
+    if ((Field[Index] < '0') || (Field[Index] > '9')) {
+      return EFI_INVALID_PARAMETER;
+    }
+
+    Digit = (UINT32)(Field[Index] - '0');
+    if (ParsedValue > ((MAX_UINT32 - Digit) / 10)) {
+      return EFI_BAD_BUFFER_SIZE;
+    }
+
+    ParsedValue = (ParsedValue * 10) + Digit;
+  }
+
+  *Value = ParsedValue;
+  return EFI_SUCCESS;
+}
+
+/**
   Check whether the compatible spec identifies NanoE8GB.
 
   @param[in]  CompatSpec  TegraPlatformCompatSpec value.
@@ -2089,6 +2146,179 @@ GeneratePlatformCompatSpecString (
 }
 
 /**
+  Copy one dash-delimited platform spec field.
+
+  @param[in]  FieldStart  Pointer to the first field character.
+  @param[out] Field       Buffer to receive the field.
+  @param[in]  FieldSize   Size of Field in bytes.
+
+  @retval EFI_SUCCESS           Field copied successfully.
+  @retval EFI_INVALID_PARAMETER Invalid parameters.
+  @retval EFI_BUFFER_TOO_SMALL  Field does not fit in Field.
+
+**/
+STATIC
+EFI_STATUS
+EFIAPI
+CopyPlatformSpecField (
+  IN  CONST CHAR8  *FieldStart,
+  OUT CHAR8        *Field,
+  IN  UINTN        FieldSize
+  )
+{
+  CONST CHAR8  *FieldEnd;
+  UINTN        FieldLen;
+
+  if ((FieldStart == NULL) || (Field == NULL) || (FieldSize == 0)) {
+    return EFI_INVALID_PARAMETER;
+  }
+
+  FieldEnd = AsciiStrStr (FieldStart, "-");
+  if (FieldEnd == NULL) {
+    return EFI_INVALID_PARAMETER;
+  }
+
+  FieldLen = (UINTN)(FieldEnd - FieldStart);
+  if (FieldLen >= FieldSize) {
+    return EFI_BUFFER_TOO_SMALL;
+  }
+
+  CopyMem (Field, FieldStart, FieldLen);
+  Field[FieldLen] = '\0';
+
+  return EFI_SUCCESS;
+}
+
+/**
+  Parse a Tegra platform spec string into platform spec info.
+
+  Both TegraPlatformSpec and TegraPlatformCompatSpec use the first three
+  dash-delimited fields for board ID, FAB, and SKU.  In both formats, the
+  board name starts after the sixth dash and runs to the trailing dash.
+
+  @param[in]  SpecString  TegraPlatformSpec or TegraPlatformCompatSpec.
+  @param[out] SpecInfo    Parsed platform spec info.
+
+  @retval EFI_SUCCESS           Spec string parsed successfully.
+  @retval EFI_INVALID_PARAMETER Invalid parameters or malformed spec string.
+  @retval EFI_BUFFER_TOO_SMALL  A spec field does not fit in SpecInfo.
+
+**/
+STATIC
+EFI_STATUS
+EFIAPI
+ParseTegraPlatformSpec (
+  IN  CONST CHAR8            *SpecString,
+  OUT TegraPlatformSpecInfo  *SpecInfo
+  )
+{
+  EFI_STATUS   Status;
+  CONST CHAR8  *FieldStart;
+  CONST CHAR8  *FieldEnd;
+  CHAR8        BoardIdStr[5];
+  CHAR8        BoardSkuStr[5];
+  UINTN        Index;
+  UINTN        BoardNameLen;
+
+  if ((SpecString == NULL) || (SpecInfo == NULL)) {
+    return EFI_INVALID_PARAMETER;
+  }
+
+  ZeroMem (SpecInfo, sizeof (*SpecInfo));
+
+  FieldStart = SpecString;
+  Status     = CopyPlatformSpecField (
+                 FieldStart,
+                 BoardIdStr,
+                 sizeof (BoardIdStr)
+                 );
+  if (EFI_ERROR (Status)) {
+    return Status;
+  }
+
+  Status = ParseAsciiUint32Field (
+             BoardIdStr,
+             AsciiStrLen (BoardIdStr),
+             &SpecInfo->mBoardId
+             );
+  if (EFI_ERROR (Status)) {
+    return Status;
+  }
+
+  FieldStart = AsciiStrStr (FieldStart, "-");
+  if (FieldStart == NULL) {
+    return EFI_INVALID_PARAMETER;
+  }
+
+  FieldStart++;
+  Status = CopyPlatformSpecField (
+             FieldStart,
+             SpecInfo->mBoardFab,
+             sizeof (SpecInfo->mBoardFab)
+             );
+  if (EFI_ERROR (Status)) {
+    return Status;
+  }
+
+  FieldStart = AsciiStrStr (FieldStart, "-");
+  if (FieldStart == NULL) {
+    return EFI_INVALID_PARAMETER;
+  }
+
+  FieldStart++;
+  Status = CopyPlatformSpecField (
+             FieldStart,
+             BoardSkuStr,
+             sizeof (BoardSkuStr)
+             );
+  if (EFI_ERROR (Status)) {
+    return Status;
+  }
+
+  Status = ParseAsciiUint32Field (
+             BoardSkuStr,
+             AsciiStrLen (BoardSkuStr),
+             &SpecInfo->mBoardSku
+             );
+  if (EFI_ERROR (Status)) {
+    return Status;
+  }
+
+  FieldStart = SpecString;
+  for (Index = 0; Index < 6; Index++) {
+    FieldStart = AsciiStrStr (FieldStart, "-");
+    if (FieldStart == NULL) {
+      return EFI_INVALID_PARAMETER;
+    }
+
+    FieldStart++;
+  }
+
+  BoardNameLen = AsciiStrLen (FieldStart);
+  if (BoardNameLen == 0) {
+    return EFI_INVALID_PARAMETER;
+  }
+
+  if (FieldStart[BoardNameLen - 1] == '-') {
+    BoardNameLen--;
+  }
+
+  if (BoardNameLen == 0) {
+    return EFI_INVALID_PARAMETER;
+  }
+
+  if (BoardNameLen >= sizeof (SpecInfo->mBoardName)) {
+    return EFI_BUFFER_TOO_SMALL;
+  }
+
+  FieldEnd = FieldStart + BoardNameLen;
+  CopyMem (SpecInfo->mBoardName, FieldStart, (UINTN)(FieldEnd - FieldStart));
+  SpecInfo->mBoardName[BoardNameLen] = '\0';
+
+  return EFI_SUCCESS;
+}
+
+/**
   Check and create TegraPlatformSpec and TegraPlatformCompatSpec UEFI variables.
 
   @param[in]  BoardInfo     Pointer to board information from EEPROM.
@@ -2108,7 +2338,6 @@ EnsurePlatformSpecVariables (
   EFI_STATUS  Status;
   CHAR8       SpecString[MAX_SPEC_STRING_LEN];
   CHAR8       CompatSpecString[MAX_SPEC_STRING_LEN];
-  CHAR8       ExistingSpec[MAX_SPEC_STRING_LEN];
   UINTN       DataSize;
   BOOLEAN     SpecExists;
   BOOLEAN     CompatSpecExists;
@@ -2118,45 +2347,40 @@ EnsurePlatformSpecVariables (
     return EFI_INVALID_PARAMETER;
   }
 
-  DataSize   = sizeof (ExistingSpec) - 1;
+  DataSize   = sizeof (SpecString) - 1;
   SpecExists = FALSE;
   Status     = gRT->GetVariable (
                       TEGRA_PLATFORM_SPEC_VARIABLE_NAME,
                       &gNVIDIAPublicVariableGuid,
                       NULL,
                       &DataSize,
-                      ExistingSpec
+                      SpecString
                       );
   if (!EFI_ERROR (Status)) {
-    ExistingSpec[DataSize] = '\0';
-    SpecExists             = TRUE;
-    PreIsoLogWrite (L"%a: TegraPlatformSpec exists: %a\r\n", __FUNCTION__, ExistingSpec);
+    SpecString[DataSize] = '\0';
+    SpecExists           = TRUE;
+    PreIsoLogWrite (L"%a: TegraPlatformSpec exists: %a\r\n", __FUNCTION__, SpecString);
   } else if (Status != EFI_NOT_FOUND) {
     PreIsoLogPrint (L"%a: Error reading TegraPlatformSpec: %r\r\n", __FUNCTION__, Status);
     return Status;
   }
 
-  DataSize         = sizeof (ExistingSpec) - 1;
+  DataSize         = sizeof (CompatSpecString) - 1;
   CompatSpecExists = FALSE;
   Status           = gRT->GetVariable (
                             TEGRA_PLATFORM_COMPAT_SPEC_VARIABLE_NAME,
                             &gNVIDIAPublicVariableGuid,
                             NULL,
                             &DataSize,
-                            ExistingSpec
+                            CompatSpecString
                             );
   if (!EFI_ERROR (Status)) {
-    ExistingSpec[DataSize] = '\0';
-    CompatSpecExists       = TRUE;
-    PreIsoLogWrite (L"%a: TegraPlatformCompatSpec exists: %a\r\n", __FUNCTION__, ExistingSpec);
+    CompatSpecString[DataSize] = '\0';
+    CompatSpecExists           = TRUE;
+    PreIsoLogWrite (L"%a: TegraPlatformCompatSpec exists: %a\r\n", __FUNCTION__, CompatSpecString);
   } else if (Status != EFI_NOT_FOUND) {
     PreIsoLogPrint (L"%a: Error reading TegraPlatformCompatSpec: %r\r\n", __FUNCTION__, Status);
     return Status;
-  }
-
-  if (SpecExists && CompatSpecExists) {
-    PreIsoLogWrite (L"%a: Both spec variables already exist\r\n", __FUNCTION__);
-    return EFI_SUCCESS;
   }
 
   if (!SpecExists) {
@@ -2201,6 +2425,18 @@ EnsurePlatformSpecVariables (
     }
 
     PreIsoLogWrite (L"%a: Created TegraPlatformCompatSpec: %a\r\n", __FUNCTION__, CompatSpecString);
+  }
+
+  Status = ParseTegraPlatformSpec (SpecString, &mTegraPlatformSpec);
+  if (EFI_ERROR (Status)) {
+    PreIsoLogPrint (L"%a: Failed to cache TegraPlatformSpec: %r\r\n", __FUNCTION__, Status);
+    return Status;
+  }
+
+  Status = ParseTegraPlatformSpec (CompatSpecString, &mTegraPlatformCompatSpec);
+  if (EFI_ERROR (Status)) {
+    PreIsoLogPrint (L"%a: Failed to cache TegraPlatformCompatSpec: %r\r\n", __FUNCTION__, Status);
+    return Status;
   }
 
   return EFI_SUCCESS;
