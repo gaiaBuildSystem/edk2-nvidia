@@ -1402,9 +1402,9 @@ ParseAsciiUint32Field (
 }
 
 /**
-  Check whether the compatible spec identifies NanoE8GB.
+  Check whether the board name identifies NanoE8GB.
 
-  @param[in]  CompatSpec  TegraPlatformCompatSpec value.
+  @param[in]  BoardName  BoardName parsed from TegraPlatformCompatSpec.
 
   @retval TRUE   Board name identifies NanoE8GB.
   @retval FALSE  Board name does not identify NanoE8GB.
@@ -1413,17 +1413,17 @@ ParseAsciiUint32Field (
 STATIC
 BOOLEAN
 IsNanoe8gb (
-  IN CONST CHAR8  *CompatSpec
+  IN CONST CHAR8  *BoardName
   )
 {
-  return (CompatSpec != NULL) &&
-         (AsciiStrStr (CompatSpec, BOARD_NAME_ORIN_NANOE8GB_DEVKIT) != NULL);
+  return (BoardName != NULL) &&
+         (AsciiStrStr (BoardName, BOARD_NAME_ORIN_NANOE8GB_DEVKIT) != NULL);
 }
 
 /**
-  Check whether the compatible spec identifies a super board.
+  Check whether the board name identifies a super board.
 
-  @param[in]  CompatSpec  TegraPlatformCompatSpec value.
+  @param[in]  BoardName  BoardName parsed from TegraPlatformCompatSpec.
 
   @retval TRUE   Board name contains "super".
   @retval FALSE  Board name does not contain "super".
@@ -1432,28 +1432,45 @@ IsNanoe8gb (
 STATIC
 BOOLEAN
 IsSuper (
-  IN CONST CHAR8  *CompatSpec
+  IN CONST CHAR8  *BoardName
   )
 {
-  return (CompatSpec != NULL) && (AsciiStrStr (CompatSpec, "super") != NULL);
+  return (BoardName != NULL) && (AsciiStrStr (BoardName, "super") != NULL);
 }
 
 /**
-  Select AGX Orin capsule payload from board ID, SKU, and FAB.
-
-  @param[in]  BoardSku  Board SKU parsed from EEPROM.
-  @param[in]  BoardFab  Board FAB parsed from EEPROM.
+  Select AGX Orin capsule payload from cached TegraPlatformCompatSpec fields.
 
   @retval Capsule file name for the detected AGX Orin variant.
 
 **/
 STATIC
 CONST CHAR16 *
-GetAgxOrinCapsuleFileNameFromBoardInfo (
-  IN UINT32  BoardSku,
-  IN UINT32  BoardFab
+GetAgxOrinCapsuleFileName (
+  VOID
   )
 {
+  EFI_STATUS   Status;
+  UINT32       BoardFab;
+  UINT32       BoardSku;
+  CONST CHAR8  *BoardName;
+
+  BoardName = mTegraPlatformCompatSpec.mBoardName;
+  if (IsSuper (BoardName)) {
+    return CAPSULE_3701_AGX_SUPER;
+  }
+
+  BoardSku = mTegraPlatformCompatSpec.mBoardSku;
+  Status   = ParseAsciiUint32Field (
+               mTegraPlatformCompatSpec.mBoardFab,
+               AsciiStrLen (mTegraPlatformCompatSpec.mBoardFab),
+               &BoardFab
+               );
+  if (EFI_ERROR (Status)) {
+    PreIsoLogPrint (L"%a: Failed to parse cached TegraPlatformCompatSpec BoardFab: %r, using default %s\r\n", __FUNCTION__, Status, CAPSULE_DEFAULT_NAME);
+    return CAPSULE_DEFAULT_NAME;
+  }
+
   if ((BoardSku == 4) || (BoardSku == 5)) {
     return CAPSULE_3701_AGX;
   }
@@ -1475,64 +1492,7 @@ GetAgxOrinCapsuleFileNameFromBoardInfo (
 }
 
 /**
-  Select AGX Orin capsule payload.
-
-  Board ID/SKU/FAB are not sufficient to distinguish jetson-agx-orin-devkit
-  from jetson-agx-orin-devkit-super, so the compatible spec board name is used.
-
-  @param[in]  BoardSku  Board SKU parsed from EEPROM.
-  @param[in]  BoardFab  Board FAB parsed from EEPROM.
-
-  @retval Capsule file name for the detected AGX Orin variant.
-
-**/
-STATIC
-CONST CHAR16 *
-GetAgxOrinCapsuleFileName (
-  IN UINT32  BoardSku,
-  IN UINT32  BoardFab
-  )
-{
-  EFI_STATUS    Status;
-  CHAR8         CompatSpec[MAX_SPEC_STRING_LEN];
-  UINTN         DataSize;
-  CONST CHAR16  *DefaultCapsuleFileName;
-
-  DefaultCapsuleFileName = GetAgxOrinCapsuleFileNameFromBoardInfo (BoardSku, BoardFab);
-
-  DataSize = sizeof (CompatSpec) - 1;
-  Status   = gRT->GetVariable (
-                    TEGRA_PLATFORM_COMPAT_SPEC_VARIABLE_NAME,
-                    &gNVIDIAPublicVariableGuid,
-                    NULL,
-                    &DataSize,
-                    CompatSpec
-                    );
-  if (EFI_ERROR (Status)) {
-    PreIsoLogPrint (
-      L"%a: Unable to read TegraPlatformCompatSpec: %r, using %s\r\n",
-      __FUNCTION__,
-      Status,
-      DefaultCapsuleFileName
-      );
-    return DefaultCapsuleFileName;
-  }
-
-  CompatSpec[DataSize] = '\0';
-  PreIsoLogWrite (L"%a: TegraPlatformCompatSpec=%a\r\n", __FUNCTION__, CompatSpec);
-
-  if (IsSuper (CompatSpec)) {
-    return CAPSULE_3701_AGX_SUPER;
-  }
-
-  return DefaultCapsuleFileName;
-}
-
-/**
-  Select Orin Nano capsule payload.
-
-  Board ID/SKU/FAB are not sufficient to distinguish jetson-orin-nano-devkit
-  from jetson-orin-nanoe8gb-devkit, so the compatible spec board name is used.
+  Select Orin Nano capsule payload from cached TegraPlatformCompatSpec fields.
 
   @retval Capsule file name for the detected Orin Nano variant.
 
@@ -1543,39 +1503,19 @@ GetOrinNanoCapsuleFileName (
   VOID
   )
 {
-  EFI_STATUS  Status;
-  CHAR8       CompatSpec[MAX_SPEC_STRING_LEN];
-  UINTN       DataSize;
+  CONST CHAR8  *BoardName;
 
-  DataSize = sizeof (CompatSpec) - 1;
-  Status   = gRT->GetVariable (
-                    TEGRA_PLATFORM_COMPAT_SPEC_VARIABLE_NAME,
-                    &gNVIDIAPublicVariableGuid,
-                    NULL,
-                    &DataSize,
-                    CompatSpec
-                    );
-  if (EFI_ERROR (Status)) {
-    PreIsoLogPrint (
-      L"%a: Unable to read TegraPlatformCompatSpec: %r, using default 3767 capsule\r\n",
-      __FUNCTION__,
-      Status
-      );
-    return CAPSULE_3767;
-  }
+  BoardName = mTegraPlatformCompatSpec.mBoardName;
 
-  CompatSpec[DataSize] = '\0';
-  PreIsoLogWrite (L"%a: TegraPlatformCompatSpec=%a\r\n", __FUNCTION__, CompatSpec);
-
-  if (IsNanoe8gb (CompatSpec)) {
-    if (IsSuper (CompatSpec)) {
+  if (IsNanoe8gb (BoardName)) {
+    if (IsSuper (BoardName)) {
       return CAPSULE_3767_NANOE8GB_SUPER;
     }
 
     return CAPSULE_3767_NANOE8GB;
   }
 
-  if (IsSuper (CompatSpec)) {
+  if (IsSuper (BoardName)) {
     return CAPSULE_3767_SUPER;
   }
 
@@ -1583,9 +1523,8 @@ GetOrinNanoCapsuleFileName (
 }
 
 /**
-  Select capsule file name based on board ID, SKU, FAB, and compatible spec.
+  Select capsule file name based on cached TegraPlatformCompatSpec fields.
 
-  @param[in]  BoardInfo       Pointer to board information from EEPROM.
   @param[out] CapsuleSource   Buffer to store source capsule path.
   @param[out] CapsuleDest     Buffer to store destination capsule path.
   @param[in]  BufferSize      Size of the buffers.
@@ -1598,26 +1537,15 @@ STATIC
 EFI_STATUS
 EFIAPI
 SelectCapsuleFile (
-  IN  CONST TEGRA_EEPROM_BOARD_INFO  *BoardInfo,
-  OUT CHAR16                         *CapsuleSource,
-  OUT CHAR16                         *CapsuleDest,
-  IN  UINTN                          BufferSize
+  OUT CHAR16  *CapsuleSource,
+  OUT CHAR16  *CapsuleDest,
+  IN  UINTN   BufferSize
   )
 {
-  CONST EEPROM_PART_NUMBER  *EepromPartNumber;
-  CHAR16                    BoardIdStr[5];
-  CHAR16                    BoardSkuStr[5];
-  CHAR16                    BoardFabStr[4];
-  UINTN                     BoardIdN;
-  UINTN                     BoardSkuN;
-  UINTN                     BoardFabN;
-  UINT32                    BoardId;
-  UINT32                    BoardSku;
-  UINT32                    BoardFab;
-  CONST CHAR16              *CapsuleFileName;
-  EFI_STATUS                Status;
+  CONST CHAR16  *CapsuleFileName;
+  UINT32        BoardId;
 
-  if ((BoardInfo == NULL) || (CapsuleSource == NULL) || (CapsuleDest == NULL)) {
+  if ((CapsuleSource == NULL) || (CapsuleDest == NULL)) {
     return EFI_INVALID_PARAMETER;
   }
 
@@ -1625,74 +1553,10 @@ SelectCapsuleFile (
     return EFI_BUFFER_TOO_SMALL;
   }
 
-  EepromPartNumber = (EEPROM_PART_NUMBER *)&BoardInfo->ProductId[0];
-
-  if (!IsTegraBoardFormat (EepromPartNumber)) {
-    PreIsoLogPrint (
-      L"%a: Non-Tegra EEPROM format (ProductId: %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x), using default capsule\r\n",
-      __FUNCTION__,
-      BoardInfo->ProductId[0],
-      BoardInfo->ProductId[1],
-      BoardInfo->ProductId[2],
-      BoardInfo->ProductId[3],
-      BoardInfo->ProductId[4],
-      BoardInfo->ProductId[5],
-      BoardInfo->ProductId[6],
-      BoardInfo->ProductId[7],
-      BoardInfo->ProductId[8],
-      BoardInfo->ProductId[9]
-      );
-    CapsuleFileName = CAPSULE_DEFAULT_NAME;
-    goto Done;
-  }
-
-  BoardIdStr[0] = (CHAR16)EepromPartNumber->TegraEepromPartNumber.Id[0];
-  BoardIdStr[1] = (CHAR16)EepromPartNumber->TegraEepromPartNumber.Id[1];
-  BoardIdStr[2] = (CHAR16)EepromPartNumber->TegraEepromPartNumber.Id[2];
-  BoardIdStr[3] = (CHAR16)EepromPartNumber->TegraEepromPartNumber.Id[3];
-  BoardIdStr[4] = L'\0';
-
-  BoardSkuStr[0] = (CHAR16)EepromPartNumber->TegraEepromPartNumber.Sku[0];
-  BoardSkuStr[1] = (CHAR16)EepromPartNumber->TegraEepromPartNumber.Sku[1];
-  BoardSkuStr[2] = (CHAR16)EepromPartNumber->TegraEepromPartNumber.Sku[2];
-  BoardSkuStr[3] = (CHAR16)EepromPartNumber->TegraEepromPartNumber.Sku[3];
-  BoardSkuStr[4] = L'\0';
-
-  BoardFabStr[0] = (CHAR16)EepromPartNumber->TegraEepromPartNumber.Fab[0];
-  BoardFabStr[1] = (CHAR16)EepromPartNumber->TegraEepromPartNumber.Fab[1];
-  BoardFabStr[2] = (CHAR16)EepromPartNumber->TegraEepromPartNumber.Fab[2];
-  BoardFabStr[3] = L'\0';
-
-  Status = StrDecimalToUintnS (BoardIdStr, NULL, &BoardIdN);
-  if (EFI_ERROR (Status) || (BoardIdN > MAX_UINT32)) {
-    PreIsoLogPrint (L"%a: Failed to parse board ID: %s, using default capsule\r\n", __FUNCTION__, BoardIdStr);
-    CapsuleFileName = CAPSULE_DEFAULT_NAME;
-    goto Done;
-  }
-
-  BoardId = (UINT32)BoardIdN;
-
-  Status = StrDecimalToUintnS (BoardSkuStr, NULL, &BoardSkuN);
-  if (EFI_ERROR (Status) || (BoardSkuN > MAX_UINT32)) {
-    PreIsoLogPrint (L"%a: Failed to parse board SKU: %s, using default capsule\r\n", __FUNCTION__, BoardSkuStr);
-    CapsuleFileName = CAPSULE_DEFAULT_NAME;
-    goto Done;
-  }
-
-  BoardSku = (UINT32)BoardSkuN;
-
-  Status = StrDecimalToUintnS (BoardFabStr, NULL, &BoardFabN);
-  if (EFI_ERROR (Status) || (BoardFabN > MAX_UINT32)) {
-    BoardFab = 0;
-  } else {
-    BoardFab = (UINT32)BoardFabN;
-  }
-
-  PreIsoLogWrite (L"%a: Board ID=%d SKU=%d FAB=%d\r\n", __FUNCTION__, BoardId, BoardSku, BoardFab);
-
+  BoardId = mTegraPlatformCompatSpec.mBoardId;
   switch (BoardId) {
     case BOARD_ID_AGX_ORIN:
-      CapsuleFileName = GetAgxOrinCapsuleFileName (BoardSku, BoardFab);
+      CapsuleFileName = GetAgxOrinCapsuleFileName ();
       break;
 
     case BOARD_ID_ORIN_NANO:
@@ -1709,7 +1573,6 @@ SelectCapsuleFile (
       break;
   }
 
-Done:
   PreIsoLogWrite (L"%a: Selected capsule: %s\r\n", __FUNCTION__, CapsuleFileName);
 
   UnicodeSPrint (CapsuleSource, BufferSize, L"%s%s", CAPSULE_SOURCE_DIR, CapsuleFileName);
@@ -2941,7 +2804,7 @@ RunPreIsoInstaller (
     goto Done;
   }
 
-  Status = SelectCapsuleFile (CvmBoardInfo, CapsuleSourcePath, CapsuleDestPath, sizeof (CapsuleSourcePath));
+  Status = SelectCapsuleFile (CapsuleSourcePath, CapsuleDestPath, sizeof (CapsuleSourcePath));
   if (EFI_ERROR (Status)) {
     PreIsoLogPrint (L"%a: Unable to select capsule file: %r\r\n", __FUNCTION__, Status);
     goto Done;
