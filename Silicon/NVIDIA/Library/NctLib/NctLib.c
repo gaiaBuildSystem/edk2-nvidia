@@ -17,6 +17,7 @@
 #include <Library/UefiBootServicesTableLib.h>
 #include <Library/UefiLib.h>
 #include <Library/NctLib.h>
+#include <Library/NetLib.h>
 #include <Library/FdtLib.h>
 #include <Library/DeviceTreeHelperLib.h>
 #include <Library/PlatformResourceLib.h>
@@ -629,6 +630,8 @@ NctPopulateMacAddrs (
 {
   EFI_STATUS  Status;
   NCT_ITEM    Item;
+  UINT8       BtAddrLe[NET_ETHER_ADDR_LEN];
+  UINTN       ByteIndex;
 
   if (Dtb == NULL) {
     return EFI_INVALID_PARAMETER;
@@ -664,13 +667,24 @@ NctPopulateMacAddrs (
     DEBUG ((DEBUG_ERROR, "%a: Failed to set ETH MAC from NCT: %r\n", __FUNCTION__, Status));
   }
 
-  /* Bluetooth: /serial@3130000/bluetooth/local-bd-address */
+  /* Bluetooth: /serial@3130000/bluetooth/local-bd-address
+   *
+   * The brcm,bcm*-bt kernel driver consumes this property as the payload of
+   * the BCM HCI Write_BD_ADDR vendor command without any byte swap, and that
+   * command takes the address in little-endian (LSB first). NCT stores the
+   * MAC in natural MSB-first order, so byte-reverse before publishing it to
+   * the DTB. WiFi/Ethernet stay MSB-first.
+   */
   Status = NctReadItem (NCT_ID_BT_ADDR, &Item);
   if (EFI_ERROR (Status)) {
     DEBUG ((DEBUG_ERROR, "%a: Failed to read BT MAC from NCT: %r\n", __FUNCTION__, Status));
   }
 
-  Status = SetMacAddrInDtb (Dtb, "/serial@3130000/bluetooth", "local-bd-address", Item.BtAddr.Addr, "BT MAC");
+  for (ByteIndex = 0; ByteIndex < NET_ETHER_ADDR_LEN; ByteIndex++) {
+    BtAddrLe[ByteIndex] = Item.BtAddr.Addr[NET_ETHER_ADDR_LEN - 1 - ByteIndex];
+  }
+
+  Status = SetMacAddrInDtb (Dtb, "/serial@3130000/bluetooth", "local-bd-address", BtAddrLe, "BT MAC (LE)");
   if (EFI_ERROR (Status)) {
     DEBUG ((DEBUG_ERROR, "%a: Failed to set BT MAC from NCT: %r\n", __FUNCTION__, Status));
   }
