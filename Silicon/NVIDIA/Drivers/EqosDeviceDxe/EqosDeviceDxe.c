@@ -201,6 +201,12 @@ DeviceDiscoveryNotify (
   PlatformType = TegraGetPlatform ();
   switch (Phase) {
     case DeviceDiscoveryDriverBindingSupported:
+      // check DTB root node for t268
+      if (!EFI_ERROR (DeviceTreeCheckNodeSingleCompatibility ("nvidia,tegra268", 0))) {
+        DEBUG ((DEBUG_ERROR, "%a: t268 eqos not supported\r\n", __FUNCTION__));
+        return EFI_UNSUPPORTED;
+      }
+
       if (NULL != DeviceTreeNode) {
         Status = DeviceTreeGetNamedSubnode ("fixed-link", DeviceTreeNode->NodeOffset, &NodeOffset);
         if (!EFI_ERROR (Status)) {
