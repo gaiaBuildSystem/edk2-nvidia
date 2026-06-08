@@ -1,7 +1,7 @@
 /** @file
   OP-TEE specific header file.
 
-  SPDX-FileCopyrightText: Copyright (c) 2022-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+  SPDX-FileCopyrightText: Copyright (c) 2022-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 
   SPDX-License-Identifier: BSD-2-Clause-Patent
 
@@ -56,6 +56,7 @@
 #define OPTEE_ORIGIN_COMMUNICATION  0x00000002
 #define OPTEE_ERROR_BAD_PARAMS      0xFFFF0006
 #define OPTEE_ERROR_ITEM_NOT_FOUND  0xFFFF0008
+#define OPTEE_ERROR_NOT_SUPPORTED   0xFFFF000A
 #define OPTEE_ERROR_OUT_OF_MEMORY   0xFFFF000C
 #define OPTEE_ERROR_COMMUNICATION   0xFFFF000E
 

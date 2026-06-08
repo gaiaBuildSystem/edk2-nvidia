@@ -2,7 +2,7 @@
   Api's to communicate with OP-TEE OS (Trusted OS based on ARM TrustZone) via
   secure monitor calls.
 
-  SPDX-FileCopyrightText: Copyright (c) 2022-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+  SPDX-FileCopyrightText: Copyright (c) 2022-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 
   SPDX-License-Identifier: BSD-2-Clause-Patent
 
@@ -328,8 +328,8 @@ HandleCmdAlloc (
   OPTEE_MESSAGE_ARG  *Msg
   )
 {
-  BOOLEAN           Ret = TRUE;
-  UINTN             Size;
+  BOOLEAN           Ret     = TRUE;
+  UINTN             Size    = 0;
   VOID              *Buf    = NULL;
   OPTEE_SHM_COOKIE  *Cookie = NULL;
   UINT64            PageList;
@@ -346,12 +346,14 @@ HandleCmdAlloc (
   Buf = AllocateAlignedRuntimePages (EFI_SIZE_TO_PAGES (Size), OPTEE_MSG_PAGE_SIZE);
   if (Buf == NULL) {
     DEBUG ((DEBUG_WARN, "Failed to alloc buf"));
+    Msg->Return = OPTEE_ERROR_OUT_OF_MEMORY;
     goto Error;
   }
 
   Cookie = AllocateAlignedRuntimePages (EFI_SIZE_TO_PAGES (sizeof (OPTEE_SHM_COOKIE)), OPTEE_MSG_PAGE_SIZE);
   if (Cookie == NULL) {
     DEBUG ((DEBUG_WARN, "Failed to alloc cookie"));
+    Msg->Return = OPTEE_ERROR_OUT_OF_MEMORY;
     goto Error;
   }
 
@@ -360,6 +362,7 @@ HandleCmdAlloc (
   Status       = OpteeSetupPageList (NULL, Buf, Size, &PageList);
   if (EFI_ERROR (Status)) {
     DEBUG ((DEBUG_WARN, "Failed to register %r\n", Status));
+    Msg->Return = OPTEE_ERROR_OUT_OF_MEMORY;
     goto Error;
   }
 
@@ -371,6 +374,16 @@ HandleCmdAlloc (
 
   Msg->Return = OPTEE_SUCCESS;
 Error:
+  if (Msg->Return != OPTEE_SUCCESS) {
+    if (Buf != NULL) {
+      FreePages (Buf, EFI_SIZE_TO_PAGES (Size));
+    }
+
+    if (Cookie != NULL) {
+      FreePages (Cookie, EFI_SIZE_TO_PAGES (sizeof (OPTEE_SHM_COOKIE)));
+    }
+  }
+
   return Ret;
 }
 
@@ -426,16 +439,22 @@ HandleRpcCmd (
     Msg = (OPTEE_MESSAGE_ARG *)Cookie->Addr;
   }
 
+  Msg->Return = OPTEE_ERROR_NOT_SUPPORTED;
+
   switch (Msg->Command) {
     case OPTEE_MSG_RPC_CMD_SHM_ALLOC:
       if (!InRuntime) {
         HandleCmdAlloc (Msg);
+      } else {
+        Msg->Return = OPTEE_ERROR_OUT_OF_MEMORY;
       }
 
       break;
     case OPTEE_MSG_RPC_CMD_SHM_FREE:
       if (!InRuntime) {
         HandleCmdFree (Msg);
+      } else {
+        Msg->Return = OPTEE_SUCCESS;
       }
 
       break;
@@ -446,7 +465,7 @@ HandleRpcCmd (
       HandleCmdNotification (Msg);
       break;
     default:
-      DEBUG ((DEBUG_WARN, "Unhandled command %d \n", Msg->Command));
+      DEBUG ((DEBUG_WARN, "Unhandled RPC command 0x%x\n", (UINT32)Msg->Command));
       break;
   }
 
