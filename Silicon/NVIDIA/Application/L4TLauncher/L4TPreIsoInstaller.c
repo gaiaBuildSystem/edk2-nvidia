@@ -1439,6 +1439,30 @@ IsSuper (
 }
 
 /**
+  Check whether cached TegraPlatformSpec and passed-in SpecString identify non-Super Jetson Orin Nano Devkit SKU 5.
+
+  @param[in]  SpecString  String containing the board name to check.
+
+  @retval TRUE   Cached TegraPlatformSpec is Orin Nano SKU 5 and SpecString does not contain Super BoardName.
+  @retval FALSE  Cached TegraPlatformSpec is not Orin Nano SKU 5 or SpecString contains Super BoardName.
+
+**/
+STATIC
+BOOLEAN
+IsOrinNanoDevkitSku5NonSuper (
+  IN CONST CHAR8  *SpecString
+  )
+{
+  if (SpecString == NULL) {
+    return TRUE;
+  }
+
+  return (mTegraPlatformSpec.mBoardId == BOARD_ID_ORIN_NANO) &&
+         (mTegraPlatformSpec.mBoardSku == 5) &&
+         (AsciiStrStr (SpecString, BOARD_NAME_ORIN_NANO_DEVKIT_SUPER) == NULL);
+}
+
+/**
   Select AGX Orin capsule payload from cached TegraPlatformCompatSpec fields.
 
   @retval Capsule file name for the detected AGX Orin variant.
@@ -1752,7 +1776,7 @@ ResolveCompatSpecParams (
         } else {
           *BoardName = BOARD_NAME_ORIN_NANOE8GB_DEVKIT;
         }
-      } else if (IsSuperConf) {
+      } else if (IsSuperConf || (BoardSku == 5)) {
         *BoardName = BOARD_NAME_ORIN_NANO_DEVKIT_SUPER;
       } else {
         *BoardName = BOARD_NAME_ORIN_NANO_DEVKIT;
@@ -1947,6 +1971,12 @@ GeneratePlatformCompatSpecString (
       (BoardFab[2] == '\0') || (BoardName[0] == '\0'))
   {
     return EFI_INVALID_PARAMETER;
+  }
+
+  // Always use "super" for non-super Orin Nano Devkit SKU 5
+  // to enhance its performance
+  if (IsOrinNanoDevkitSku5NonSuper (BoardName)) {
+    BoardName = BOARD_NAME_ORIN_NANO_DEVKIT_SUPER;
   }
 
   ResolveCompatSpecParams (
@@ -2256,6 +2286,11 @@ EnsurePlatformSpecVariables (
   if (!EFI_ERROR (Status)) {
     CompatSpecString[DataSize] = '\0';
     PreIsoLogWrite (L"%a: TegraPlatformCompatSpec exists: %a\r\n", __FUNCTION__, CompatSpecString);
+
+    // Always generate TegraPlatformCompatSpec for non-Super Orin Nano Devkit SKU 5
+    if (IsOrinNanoDevkitSku5NonSuper (CompatSpecString)) {
+      GenCompatSpec = TRUE;
+    }
   } else if (Status == EFI_NOT_FOUND) {
     GenCompatSpec = TRUE;
   } else {

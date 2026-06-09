@@ -136,8 +136,10 @@ PreIsoInstaller ensures the following NVRAM variables exist. It creates
 `TegraPlatformSpec` from Tegra-format EEPROM data and the root DTB
 `compatible` property when `TegraPlatformSpec` is missing.
 `TegraPlatformCompatSpec` is generated from the cached `TegraPlatformSpec`
-fields and rewritten when it is missing or when `TegraPlatformSpec` was newly
-created:
+fields and rewritten when it is missing, when `TegraPlatformSpec` was newly
+created, or when the cached `TegraPlatformSpec` identifies Orin Nano SKU 5 and
+the existing `TegraPlatformCompatSpec` does not already contain
+`jetson-orin-nano-devkit-super`:
 
 - **TegraPlatformSpec**: `<BoardId>-<FAB>-<SKU>-<Rev>.0-1-2-<BoardName>-`
 - **TegraPlatformCompatSpec**: `<BoardId>-<CompatFAB>-<SKU>--1--<BoardName>-`
@@ -155,7 +157,8 @@ resolved as follows:
 | 3701 | 8 | jetson-agx-orin-devkit-industrial | 300 |
 | 3701 | 0 | jetson-agx-orin-devkit | 000 for T*, E*, or numeric FAB < 300; otherwise 300 |
 | 3701 | other | jetson-agx-orin-devkit | 300 |
-| 3767 | any | jetson-orin-nano-devkit | 000 |
+| 3767 | 5 | jetson-orin-nano-devkit-super | 000 |
+| 3767 | other | jetson-orin-nano-devkit | 000 |
 | 3834 | 0 | jetson-agx-thor-t4000 | 000 |
 | 3834 | 8 | jetson-agx-thor-devkit | 401 for EB9+, TS5+, RC2+, or numeric FAB > 400; otherwise 000 |
 | 3834 | other | jetson-agx-thor-devkit | 000 |
@@ -178,7 +181,8 @@ shown in the table, and capsule selection matches that generated board name.
 | 3767     | `nanoe8gb`           | jetson-orin-nanoe8gb-devkit        | 000 |
 | 3767     | `super`              | jetson-orin-nano-devkit-super      | 000 |
 
-For Orin Nano, NanoE8GB has base and Super variants.
+For Orin Nano, NanoE8GB has base and Super variants. Orin Nano SKU 5 is
+always treated as `jetson-orin-nano-devkit-super` as it is devkit.
 
 ## Capsule File Selection
 
@@ -215,8 +219,10 @@ parsed, capsule selection falls back to `TEGRA_BL_3701_agx.Cap`.
 
 BoardName matching is done against the parsed BoardName field, not the full
 CompatSpec string. `jetson-orin-nanoe8gb-devkit` identifies NanoE8GB, and
-`super` identifies Super board names. Capsule files are copied from `EFI\` to
-`EFI\UpdateCapsule\`; the destination directory is created if needed.
+`super` identifies Super board names. Since SKU 5 synthesizes
+`jetson-orin-nano-devkit-super`, it selects `TEGRA_BL_3767_super.Cap`.
+Capsule files are copied from `EFI\` to `EFI\UpdateCapsule\`; the destination
+directory is created if needed.
 
 ## Boot-Loop Guard
 
