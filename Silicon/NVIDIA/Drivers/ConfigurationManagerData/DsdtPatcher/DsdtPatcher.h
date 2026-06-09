@@ -1,7 +1,7 @@
 /** @file
   Patches to the DSDT
 
-  SPDX-FileCopyrightText: Copyright (c) 2019-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+  SPDX-FileCopyrightText: Copyright (c) 2019-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
   Copyright (c) 2017 - 2018, ARM Limited. All rights reserved.
 
   SPDX-License-Identifier: BSD-2-Clause-Patent
@@ -16,6 +16,7 @@
 #define ACPI_PWR_BTN_INFO  "_SB_.PBTN"
 #define ACPI_GED1_SMR1     "_SB_.GED1.SMR1"
 #define ACPI_QSPI1_STA     "_SB_.QSP1._STA"
+#define ACPI_I2C2_STA      "_SB_.I2C2._STA"
 #define ACPI_I2C3_STA      "_SB_.I2C3._STA"
 #define ACPI_SSIF_STA      "_SB_.I2C3.SSIF._STA"
 #define ACPI_MRQ0_TX       "_SB_.MRQ0.TX"
@@ -32,6 +33,7 @@
     "_SB_.PLAT"
     "_SB_.GED1.SMR1"
     "_SB_.QSP1._STA"
+    "_SB_.I2C2._STA"
     "_SB_.I2C3._STA"
     "_SB_.I2C3.SSIF._STA"
     "_SB_.MRQ0.TX"

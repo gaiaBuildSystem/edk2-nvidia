@@ -320,7 +320,7 @@ UpdateSSIFInfo (
       }
 
       SSIFStatus = 0xF;
-      Status     = PatchProtocol->SetNodeData (PatchProtocol, &AcpiNodeInfo, &I2CStatus, sizeof (SSIFStatus));
+      Status     = PatchProtocol->SetNodeData (PatchProtocol, &AcpiNodeInfo, &SSIFStatus, sizeof (SSIFStatus));
       if (EFI_ERROR (Status)) {
         DEBUG ((DEBUG_ERROR, "%a: Error updating %a - %r\r\n", __FUNCTION__, ACPI_SSIF_STA, Status));
       }
@@ -530,6 +530,99 @@ UpdateEepromInfo (
   return EFI_SUCCESS;
 }
 
+/** patch DPLL Clock data in DSDT.
+
+  @retval EFI_SUCCESS   Success
+
+**/
+STATIC
+EFI_STATUS
+EFIAPI
+UpdateDpllInfo (
+  IN NVIDIA_AML_PATCH_PROTOCOL  *PatchProtocol
+  )
+{
+  EFI_STATUS            Status;
+  INT32                 NodeOffset;
+  INT32                 SubNodeOffset;
+  NVIDIA_AML_NODE_INFO  AcpiNodeInfo;
+  UINT8                 I2CStatus;
+  CONST CHAR8           *StatusString;
+  UINT32                PropLen;
+
+  NodeOffset = -1;
+  Status     = DeviceTreeGetNextCompatibleNode (I2CCompatibleInfo, &NodeOffset);
+  while (EFI_SUCCESS == Status) {
+    // Check I2C node status
+    PropLen = 0;
+    Status  = DeviceTreeGetNodeProperty (
+                NodeOffset,
+                "status",
+                (CONST VOID **)&StatusString,
+                &PropLen
+                );
+    // Per Device Tree spec, a node with NO status property is implicitly enabled
+    if ((Status == EFI_NOT_FOUND) ||
+        (!EFI_ERROR (Status) && (PropLen > 0) && (AsciiStrCmp (StatusString, "okay") == 0)))
+    {
+      NVIDIA_DEVICE_TREE_REGISTER_DATA  RegData;
+      UINT32                            NumRegs = 1;
+
+      // Check I2C node base address is 0xc240000(I2C2)
+      Status = DeviceTreeGetRegisters (NodeOffset, &RegData, &NumRegs);
+      if ((!EFI_ERROR (Status)) && (RegData.BaseAddress == 0xc240000ULL)) {
+        // Find DPLL node
+        Status = DeviceTreeGetNamedSubnode (
+                   "dpll",
+                   NodeOffset,
+                   &SubNodeOffset
+                   );
+        if (!EFI_ERROR (Status)) {
+          // Check DPLL node status
+          PropLen = 0;
+          Status  = DeviceTreeGetNodeProperty (
+                      SubNodeOffset,
+                      "status",
+                      (CONST VOID **)&StatusString,
+                      &PropLen
+                      );
+          if ((Status == EFI_NOT_FOUND) ||
+              (!EFI_ERROR (Status) && (PropLen > 0) && (AsciiStrCmp (StatusString, "okay") == 0)))
+          {
+            // Update I2C2 Status
+            Status = PatchProtocol->FindNode (PatchProtocol, ACPI_I2C2_STA, &AcpiNodeInfo);
+            if (EFI_ERROR (Status)) {
+              DEBUG ((DEBUG_ERROR, "%a: Find %a failed: %r\r\n", __FUNCTION__, ACPI_I2C2_STA, Status));
+              goto ErrorExit;
+            }
+
+            if (AcpiNodeInfo.Size != sizeof (I2CStatus)) {
+              Status = EFI_DEVICE_ERROR;
+              DEBUG ((DEBUG_ERROR, "%a: %a size is not match: %u\r\n", __FUNCTION__, ACPI_I2C2_STA, AcpiNodeInfo.Size));
+              goto ErrorExit;
+            }
+
+            I2CStatus = 0xF;
+            Status    = PatchProtocol->SetNodeData (PatchProtocol, &AcpiNodeInfo, &I2CStatus, sizeof (I2CStatus));
+            if (EFI_ERROR (Status)) {
+              DEBUG ((DEBUG_ERROR, "%a: Error updating %a - %r\r\n", __FUNCTION__, ACPI_I2C2_STA, Status));
+              goto ErrorExit;
+            }
+          }
+        }
+
+        // Reture SUCCESS since it only patches on I2C2
+        return EFI_SUCCESS;
+      }
+    }
+
+    Status = DeviceTreeGetNextCompatibleNode (I2CCompatibleInfo, &NodeOffset);
+  }
+
+ErrorExit:
+  return (Status == EFI_NOT_FOUND) ? EFI_SUCCESS : Status;
+}
+
 /** DSDT patcher function.
 
   The DSDT table is potentially patched with the following information:
@@ -537,6 +630,7 @@ UpdateEepromInfo (
     "_SB_.PBTN"
     "_SB_.GED1.SMR1"
     "_SB_.QSP1._STA"
+    "_SB_.I2C2._STA"
     "_SB_.I2C3._STA"
     "_SB_.I2C3.SSIF._STA"
     "_SB_.I2CB._STA"
@@ -613,6 +707,11 @@ DsdtPatcher (
   }
 
   Status = UpdatePwrBtnInfo (PatchProtocol);
+  if (EFI_ERROR (Status)) {
+    return Status;
+  }
+
+  Status = UpdateDpllInfo (PatchProtocol);
   if (EFI_ERROR (Status)) {
     return Status;
   }

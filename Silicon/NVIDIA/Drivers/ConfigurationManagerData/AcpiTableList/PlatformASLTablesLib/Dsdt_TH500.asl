@@ -1,7 +1,7 @@
 /*
  * Intel ACPI Component Architecture
  * iASL Compiler/Disassembler version 20180105 (64-bit version)
- * SPDX-FileCopyrightText: Copyright (c) 2020 - 2025, NVIDIA Corporation. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 2020 - 2026, NVIDIA Corporation. All rights reserved.
  * Copyright (c) 2000 - 2018 Intel Corporation
  *
  * SPDX-License-Identifier: BSD-2-Clause-Patent
@@ -776,10 +776,14 @@ DefinitionBlock ("dsdt_th500.aml", "DSDT", 2, "NVIDIA", "TH500", 0x00000001)
       }
     }
 
-#if FixedPcdGetBool(PcdExposeRtcI2cToOs)
     Device (I2C2) {
       Name (_HID, "NVDA0301")
       Name (_UID, 2)
+#if FixedPcdGetBool(PcdExposeRtcI2cToOs)
+      Name (_STA, 0x0F)
+#else
+      Name (_STA, 0)
+#endif
 
       Name (_CRS, ResourceTemplate() {
         Memory32Fixed (ReadWrite, 0xc240000, 0x10000)
@@ -820,7 +824,6 @@ DefinitionBlock ("dsdt_th500.aml", "DSDT", 2, "NVIDIA", "TH500", 0x00000001)
         })
       }
     }
-#endif
 
     //---------------------------------------------------------------------
     // MCF Devices
