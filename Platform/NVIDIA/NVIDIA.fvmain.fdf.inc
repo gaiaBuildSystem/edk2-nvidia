@@ -40,7 +40,9 @@ FvNameGuid         = $(PLATFORM_GUID)
     INF MdeModulePkg/Universal/PCD/Dxe/Pcd.inf
     INF MdeModulePkg/Universal/ReportStatusCodeRouter/RuntimeDxe/ReportStatusCodeRouterRuntimeDxe.inf
     INF Silicon/NVIDIA/Drivers/DebugStatusCodeDxe/DebugStatusCodeDxe.inf
+!ifdef CONFIG_TEGRA_PLATFORM_CONFIG
     INF Silicon/NVIDIA/Drivers/TegraPlatformInit/TegraPlatformInitDxe.inf
+!endif
     INF ArmPkg/Drivers/CpuDxe/CpuDxe.inf
     INF ArmPkg/Drivers/ArmGicDxe/ArmGicDxe.inf
     INF ArmPkg/Drivers/TimerDxe/TimerDxe.inf
@@ -129,6 +131,7 @@ FvNameGuid         = $(PLATFORM_GUID)
 !endif
 
 !ifdef CONFIG_ACPI
+!ifdef CONFIG_TEGRA_ACPI
   #
   # Aml Generation
   #
@@ -138,6 +141,7 @@ FvNameGuid         = $(PLATFORM_GUID)
   # Aml Patching
   #
   INF Silicon/NVIDIA/Drivers/AmlPatchDxe/AmlPatchDxe.inf
+!endif
 
   #
   # ACPI Support
@@ -187,24 +191,31 @@ FvNameGuid         = $(PLATFORM_GUID)
   INF MdeModulePkg/Universal/Console/TerminalDxe/TerminalDxe.inf
   INF MdeModulePkg/Universal/PrintDxe/PrintDxe.inf
 
+!ifdef CONFIG_BPMP
   #
   # BPMP-FW IPC protocol
   #
   INF Silicon/NVIDIA/Drivers/BpmpIpc/BpmpIpcDxe.inf
   INF Silicon/NVIDIA/Drivers/BpmpScmi/BpmpScmiDxe.inf
   INF Silicon/NVIDIA/Drivers/BpmpI2c/BpmpI2cDxe.inf
+!endif
 
+!ifdef CONFIG_TEGRA_GPIO
   #
   # GPIO driver/utility
   #
   INF Silicon/NVIDIA/Drivers/TegraGpio/TegraGpioDxe.inf
   INF Silicon/NVIDIA/Drivers/I2cExpanderGpio/I2cExpanderGpio.inf
+!endif
 
   #
   # I2C Support
   #
   INF MdeModulePkg/Bus/I2c/I2cDxe/I2cDxe.inf
+!ifdef CONFIG_TEGRA_I2C
   INF Silicon/NVIDIA/Drivers/TegraI2c/TegraI2cDxe.inf
+!endif
+
 !ifdef CONFIG_IPMI_BMC
   INF Silicon/NVIDIA/Drivers/I2cIoBmcSsifDxe/I2cIoBmcSsifDxe.inf
   INF Silicon/NVIDIA/Drivers/ArmSbmrStatusCodeDxe/ArmSbmrStatusCodeDxe.inf
@@ -663,12 +674,16 @@ FvNameGuid         = $(PLATFORM_GUID)
   #
   # Tegra Platform Configuration
   #
+!ifdef CONFIG_TEGRA_PLATFORM_CONFIG
   INF Silicon/NVIDIA/Drivers/TegraPlatformInit/TegraPlatformInitDxe.inf
+!endif
 
   #
   # Custom HII Support
   #
+!ifdef CONFIG_TEGRA_PLATFORM_CONFIG
   INF Silicon/NVIDIA/Drivers/NvidiaConfigDxe/NvidiaConfigDxe.inf
+!endif
 
 !ifdef CONFIG_SECURITY_UEFI_SECURE_BOOT
   #
@@ -710,6 +725,7 @@ FvNameGuid         = $(PLATFORM_GUID)
   #
   INF Silicon/NVIDIA/Drivers/RegulatorDxe/RegulatorDxe.inf
 
+!ifdef CONFIG_TEGRA_SPI
   #
   # QSPI Support
   #
@@ -719,8 +735,9 @@ FvNameGuid         = $(PLATFORM_GUID)
   # NOR Flash Support
   #
   INF Silicon/NVIDIA/Drivers/NorFlashDxe/NorFlashDxe.inf
+!endif
 
-!ifdef CONFIG_VARIABLE_NON_SECURE_SUPPORTED
+!ifdef CONFIG_TEGRA_VARIABLE_NON_SECURE_SUPPORTED
 !ifndef CONFIG_VARIABLE_EMULATED
   #
   # FVB Support
@@ -751,11 +768,13 @@ FvNameGuid         = $(PLATFORM_GUID)
   #
   INF Silicon/NVIDIA/Drivers/BootChainDxe/BootChainDxe.inf
 
+!ifdef CONFIG_BPMP
   #
   # CPU Frequency support
   #
   INF Silicon/NVIDIA/Drivers/TegraCpuFreqDxe/TegraCpuFreqDxe.inf
   INF Silicon/NVIDIA/Drivers/CpuFreqMonitor/CpuFreqMonitorDxe.inf
+!endif
 
   #
   # Tegra Controller Enable Driver
@@ -789,7 +808,9 @@ FvNameGuid         = $(PLATFORM_GUID)
   #
   # Multiprocessor support
   #
+!ifdef CONFIG_ARM_PSCI_MP_SERVICE
   INF ArmPkg/Drivers/ArmPsciMpServicesDxe/ArmPsciMpServicesDxe.inf
+!endif
   INF Silicon/NVIDIA/Drivers/ThreadingDxe/ThreadingDxe.inf
 
   #
@@ -830,6 +851,7 @@ FvNameGuid         = $(PLATFORM_GUID)
   INF Silicon/NVIDIA/Drivers/AndroidFmpInitDxe/AndroidFmpInitDxe.inf
 !endif
 
+!ifdef CONFIG_TEGRA_GPIO
   #
   # Gpio Power Off Driver
   #
@@ -839,6 +861,7 @@ FvNameGuid         = $(PLATFORM_GUID)
   # Gpio Boot Complete Driver
   #
   INF Silicon/NVIDIA/Drivers/GpioBootCompleteDxe/GpioBootCompleteDxe.inf
+!endif
 
 !ifdef CONFIG_FIRMWARE_MANAGEMENT_EROT
   #
@@ -918,7 +941,7 @@ FvNameGuid         = $(PLATFORM_GUID)
   #
   # MM Communication
   #
-!ifdef CONFIG_SECURITY_MM_FFA
+!ifdef CONFIG_SECURITY_MM_FFA_TEGRA
   INF Silicon/NVIDIA/Drivers/MmCommunicateFfaDxe/MmCommunicationFfa.inf
 !endif
 !ifdef CONFIG_SECURITY_MM_OPTEE
@@ -931,7 +954,7 @@ FvNameGuid         = $(PLATFORM_GUID)
   #
   # TPM
   #
-!ifdef CONFIG_SECURITY_TPM_SUPPORT
+!ifdef CONFIG_SECURITY_TPM_SUPPORT_TEGRA
 !ifdef CONFIG_SECURITY_TPM_DISCRETE
   INF Silicon/NVIDIA/Drivers/Tpm2Dxe/Tpm2Dxe.inf
   INF MdeModulePkg/Universal/SmbiosMeasurementDxe/SmbiosMeasurementDxe.inf
@@ -986,8 +1009,10 @@ FvNameGuid         = $(PLATFORM_GUID)
   # SMMUv3 support
   #
 !ifdef CONFIG_SMMU_V3
+!ifdef CONFIG_TEGRA_SMMU
   INF Silicon/NVIDIA/Drivers/SmmuV3Dxe/SmmuV3Dxe.inf
   INF Silicon/NVIDIA/Drivers/SmmuDriverDxe/SmmuDriverDxe.inf
+!endif
 !endif
 
 !ifdef CONFIG_RAS_SMBIOS_MODULE

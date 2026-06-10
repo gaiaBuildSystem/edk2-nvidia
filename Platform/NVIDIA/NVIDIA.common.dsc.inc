@@ -35,9 +35,6 @@ CONFIG_MEMORY_TEST_BIT_FADE_PATTERN=0xAA55AA55AA55AA55
 !ifndef CONFIG_MEMORY_TEST_BIT_FADE_WAIT
 CONFIG_MEMORY_TEST_BIT_FADE_WAIT=0
 !endif
-!ifndef CONFIG_MEMORY_TEST_BIT_FADE_WAIT
-CONFIG_MEMORY_TEST_BIT_FADE_WAIT=0
-!endif
 !ifndef CONFIG_FIRMWARE_CAPSULE_SIZE
 CONFIG_FIRMWARE_CAPSULE_SIZE=0
 !endif
@@ -1504,10 +1501,12 @@ CONFIG_FMP_CERTIFICATES_DTB_MAX_SIZE=0
   #
   # PEI Phase modules
   #
+!ifdef CONFIG_PREPI_MODE
   Silicon/NVIDIA/PrePi/PrePi.inf {
     <LibraryClasses>
       DefaultExceptionHandlerLib|Silicon/NVIDIA/Library/PrePiDefaultExceptionHandlerLib/PrePiDefaultExceptionHandlerLib.inf
   }
+!endif
 
   #
   # DXE
@@ -1571,14 +1570,18 @@ CONFIG_FMP_CERTIFICATES_DTB_MAX_SIZE=0
   # SMMUv3 support
   #
 !ifdef CONFIG_SMMU_V3
+!ifdef CONFIG_TEGRA_SMMU
   Silicon/NVIDIA/Drivers/SmmuV3Dxe/SmmuV3Dxe.inf
   Silicon/NVIDIA/Drivers/SmmuDriverDxe/SmmuDriverDxe.inf
+!endif
 !endif
 
   #
   # Multiprocessor support
   #
+!ifdef CONFIG_ARM_PSCI_MP_SERVICE
   ArmPkg/Drivers/ArmPsciMpServicesDxe/ArmPsciMpServicesDxe.inf
+!endif
   Silicon/NVIDIA/Drivers/ThreadingDxe/ThreadingDxe.inf
 
   #
@@ -1620,15 +1623,18 @@ CONFIG_FMP_CERTIFICATES_DTB_MAX_SIZE=0
       LockBoxLib|MdeModulePkg/Library/LockBoxNullLib/LockBoxNullLib.inf
   }
 
+!ifdef CONFIG_TEGRA_PLATFORM_CONFIG
   #
   # Tegra Platform Configuration
   #
   Silicon/NVIDIA/Drivers/TegraPlatformInit/TegraPlatformInitDxe.inf
+!endif
 
   #
   # UEFI Variables
   #
 
+!ifdef CONFIG_TEGRA_SPI
   #
   # QSPI Support
   #
@@ -1638,6 +1644,7 @@ CONFIG_FMP_CERTIFICATES_DTB_MAX_SIZE=0
   # NOR Flash Support
   #
   Silicon/NVIDIA/Drivers/NorFlashDxe/NorFlashDxe.inf
+!endif
 
   Silicon/NVIDIA/Drivers/DefaultVariableDxe/DefaultVariableDxe.inf
 !ifdef CONFIG_VARIABLE_NON_SECURE_SUPPORTED
@@ -1650,11 +1657,8 @@ CONFIG_FMP_CERTIFICATES_DTB_MAX_SIZE=0
 !endif
   }
 !endif
-!ifdef CONFIG_SECURITY_MM_SUPPORT
-  MdeModulePkg/Universal/Variable/RuntimeDxe/VariableSmmRuntimeDxe.inf
-!endif
 
-!ifdef CONFIG_VARIABLE_NON_SECURE_SUPPORTED
+!ifdef CONFIG_TEGRA_VARIABLE_NON_SECURE_SUPPORTED
 !ifndef CONFIG_VARIABLE_EMULATED
   #
   # FVB Support
@@ -1668,11 +1672,15 @@ CONFIG_FMP_CERTIFICATES_DTB_MAX_SIZE=0
 !endif
 !endif
 
+!ifdef CONFIG_SECURITY_MM_SUPPORT
+  MdeModulePkg/Universal/Variable/RuntimeDxe/VariableSmmRuntimeDxe.inf
+!endif
   #
   # Lock all variables
   #
   Silicon/NVIDIA/Drivers/VarCheckLockAllDxe/VarCheckLockAllDxe.inf
 
+!ifdef CONFIG_BPMP
   #
   # BPMP-FW IPC protocol
   #
@@ -1685,6 +1693,8 @@ CONFIG_FMP_CERTIFICATES_DTB_MAX_SIZE=0
   #
   Silicon/NVIDIA/Drivers/TegraCpuFreqDxe/TegraCpuFreqDxe.inf
   Silicon/NVIDIA/Drivers/CpuFreqMonitor/CpuFreqMonitorDxe.inf
+!endif
+
 
 
   #
@@ -1700,8 +1710,11 @@ CONFIG_FMP_CERTIFICATES_DTB_MAX_SIZE=0
   # I2C Support
   #
   MdeModulePkg/Bus/I2c/I2cDxe/I2cDxe.inf
+!ifdef CONFIG_TEGRA_I2C
   Silicon/NVIDIA/Drivers/TegraI2c/TegraI2cDxe.inf
+!endif
 
+!ifdef CONFIG_TEGRA_GPIO
   #
   # GPIO driver/utility
   #
@@ -1717,6 +1730,7 @@ CONFIG_FMP_CERTIFICATES_DTB_MAX_SIZE=0
   # Gpio Boot Complete Driver
   #
   Silicon/NVIDIA/Drivers/GpioBootCompleteDxe/GpioBootCompleteDxe.inf
+!endif
 
   #
   # Regulator support
@@ -1774,6 +1788,7 @@ CONFIG_FMP_CERTIFICATES_DTB_MAX_SIZE=0
   # ACPI/SMBIOS
   #
 !ifdef CONFIG_ACPI
+!ifdef CONFIG_TEGRA_ACPI
   #
   # Aml Generation
   #
@@ -1783,6 +1798,7 @@ CONFIG_FMP_CERTIFICATES_DTB_MAX_SIZE=0
   # Aml Patching
   #
   Silicon/NVIDIA/Drivers/AmlPatchDxe/AmlPatchDxe.inf
+!endif
 
   #
   # ACPI Support
@@ -2511,7 +2527,9 @@ CONFIG_FMP_CERTIFICATES_DTB_MAX_SIZE=0
   #
   # Custom HII Support
   #
+!ifdef CONFIG_TEGRA_PLATFORM_CONFIG
   Silicon/NVIDIA/Drivers/NvidiaConfigDxe/NvidiaConfigDxe.inf
+!endif
 
 
   #
@@ -2728,7 +2746,7 @@ CONFIG_FMP_CERTIFICATES_DTB_MAX_SIZE=0
   #
   # MM Communication
   #
-!ifdef CONFIG_SECURITY_MM_FFA
+!ifdef CONFIG_SECURITY_MM_FFA_TEGRA
   Silicon/NVIDIA/Drivers/MmCommunicateFfaDxe/MmCommunicationFfa.inf {
     <LibraryClasses>
       NULL|Silicon/StandaloneMmPkgLegacy/Library/VariableMmDependency/VariableMmDependency.inf
@@ -2753,7 +2771,7 @@ CONFIG_FMP_CERTIFICATES_DTB_MAX_SIZE=0
   #
   # TPM
   #
-!ifdef CONFIG_SECURITY_TPM_SUPPORT
+!ifdef CONFIG_SECURITY_TPM_SUPPORT_TEGRA
 !ifdef CONFIG_SECURITY_TPM_DISCRETE
   Silicon/NVIDIA/Drivers/Tpm2Dxe/Tpm2Dxe.inf
   MdeModulePkg/Universal/SmbiosMeasurementDxe/SmbiosMeasurementDxe.inf

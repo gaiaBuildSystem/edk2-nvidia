@@ -171,6 +171,13 @@ menu "Security options"
   bool
   default y if (SECURITY_TPM_DISCRETE || SECURITY_TPM_FIRMWARE)
 
+  if SECURITY_TPM_SUPPORT
+    config SECURITY_TPM_SUPPORT_TEGRA
+    bool
+    depends on SOC_GENERAL || SOC_DATACENTER
+    default y
+  endif
+
   config INFINEON_TPM_FW_UPDATE
     bool "Infineon TPM FW Update"
     depends on SECURITY_TPM_SUPPORT
@@ -213,6 +220,13 @@ menu "Security options"
     help
       UEFI MM with OPTEE support
   endchoice
+
+  if SECURITY_MM_FFA
+    config SECURITY_MM_FFA_TEGRA
+    bool
+    depends on SOC_GENERAL || SOC_DATACENTER
+    default y
+  endif
 
   config SECURITY_MM_SUPPORT
   bool
@@ -286,6 +300,13 @@ menu "Variable options"
   comment "INVALID CONFIG - a selected config requires VARIABLE_NON_SECURE_SUPPORTED, but VARIABLE_NON_SECURE_SUPPORTED has been disabled"
   depends on !VARIABLE_NON_SECURE_SUPPORTED && NEED_VARIABLE_NON_SECURE_SUPPORTED
 
+  if VARIABLE_NON_SECURE_SUPPORTED
+    config TEGRA_VARIABLE_NON_SECURE_SUPPORTED
+    bool
+    depends on SOC_GENERAL || SOC_DATACENTER
+    default y
+  endif
+
 endmenu
 
 menu "Hardware support"
@@ -323,11 +344,50 @@ menu "Hardware support"
       Allows for ignoring PCIe EP requests for IO BAR
   endif
 
+  config SUPPORTS_BPMP
+  bool
+
+  config BPMP
+  bool
+  depends on SUPPORTS_BPMP
+  default y
+
+  config SUPPORTS_TEGRA_GPIO
+  bool
+
+  config TEGRA_GPIO
+  bool
+  depends on SUPPORTS_TEGRA_GPIO
+  default y
+
+  config SUPPORTS_TEGRA_I2C
+  bool
+
+  config TEGRA_I2C
+  bool
+  depends on SUPPORTS_TEGRA_I2C
+  default y
+
+  config SUPPORTS_TEGRA_SPI
+  bool
+
+  config TEGRA_SPI
+  bool
+  depends on SUPPORTS_TEGRA_SPI
+  default y
+
   config SMMU_V3
   bool "SMMUv3 support"
   default y if BUILD_DATACENTER
   help
     Support for SMMUv3
+
+  if SMMU_V3
+    config TEGRA_SMMU
+    bool
+    depends on SOC_GENERAL || SOC_DATACENTER
+    default y
+  endif
 
   config SDHCI
   bool
@@ -816,6 +876,13 @@ menu "OS Hardware description"
   imply CONFIG_MANAGER
   help
     Platform supports ACPI boot
+
+  if ACPI
+    config TEGRA_ACPI
+    bool
+    depends on SOC_GENERAL || SOC_DATACENTER
+    default y
+  endif
 
   config DEVICETREE
   bool "Device tree support"
@@ -1560,6 +1627,30 @@ menu "Miscellaneous"
   help
     The GUID value to identify the platform image.  This rarely needs to be
     changed.
+
+  config SUPPORTS_ARM_PSCI_MP_SERVICE
+  bool
+
+  config ARM_PSCI_MP_SERVICE
+  bool
+  depends on SUPPORTS_ARM_PSCI_MP_SERVICE
+  default y
+
+  config SUPPORTS_PREPI_MODE
+  bool
+
+  config PREPI_MODE
+  bool
+  depends on SUPPORTS_PREPI_MODE
+  default y
+
+  config SUPPORTS_TEGRA_PLATFORM_CONFIG
+  bool
+
+  config TEGRA_PLATFORM_CONFIG
+  bool
+  depends on SUPPORTS_TEGRA_PLATFORM_CONFIG
+  default y
 endmenu
 
 config T26X_CPUBL_SOCKET_COUNT
