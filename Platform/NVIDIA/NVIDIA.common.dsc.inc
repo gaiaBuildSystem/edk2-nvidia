@@ -91,6 +91,7 @@ CONFIG_FMP_CERTIFICATES_DTB_MAX_SIZE=0
 [BuildOptions]
   *_*_*_ASL_FLAGS = -tc -li -so -oi
   GCC:*_*_*_CC_FLAGS = -D ENABLE_MD5_DEPRECATED_INTERFACES
+  *_*_*_CC_FLAGS  = -DDISABLE_NEW_DEPRECATED_INTERFACES
 
 !ifdef CONFIG_FS_EXT4
 !include Features/Ext4Pkg/Ext4.dsc.inc
@@ -664,9 +665,6 @@ CONFIG_FMP_CERTIFICATES_DTB_MAX_SIZE=0
   StackCheckLib|MdePkg/Library/StackCheckLib/StackCheckLib.inf
   StackCheckFailureHookLib|MdePkg/Library/StackCheckFailureHookLibNull/StackCheckFailureHookLibNull.inf
 
-
-[BuildOptions]
-  *_*_*_CC_FLAGS  = -DDISABLE_NEW_DEPRECATED_INTERFACES
 
 ################################################################################
 #
@@ -1520,50 +1518,6 @@ CONFIG_FMP_CERTIFICATES_DTB_MAX_SIZE=0
       NULL|MdeModulePkg/Library/DxeCrc32GuidedSectionExtractLib/DxeCrc32GuidedSectionExtractLib.inf
   }
 
-!ifdef CONFIG_ACPI
-  #
-  # Aml Generation
-  #
-  Silicon/NVIDIA/Drivers/AmlGenerationDxe/AmlGenerationDxe.inf
-
-  #
-  # Aml Patching
-  #
-  Silicon/NVIDIA/Drivers/AmlPatchDxe/AmlPatchDxe.inf
-
-  #
-  # ACPI Support
-  #
-  MdeModulePkg/Universal/Acpi/AcpiTableDxe/AcpiTableDxe.inf {
-    <LibraryClasses>
-!ifdef CONFIG_DEVICETREE
-      NULL|EmbeddedPkg/Library/PlatformHasAcpiLib/PlatformHasAcpiLib.inf
-!endif
-  }
-!endif
-
-  #
-  # FDT Support
-  #
-!ifdef CONFIG_DEVICETREE
-  !ifdef CONFIG_ACPI
-  EmbeddedPkg/Drivers/DtPlatformDxe/DtPlatformDxe.inf {
-    <LibraryClasses>
-      DtPlatformDtbLoaderLib|Silicon/NVIDIA/Library/DxeDtPlatformDtbLoaderLib/DxeDtPlatformDtbKernelLoaderLib.inf
-  }
-  !else
-  Silicon/NVIDIA/Drivers/DtOnlyPlatformDxe/DtOnlyPlatformDxe.inf {
-    <LibraryClasses>
-      DtPlatformDtbLoaderLib|Silicon/NVIDIA/Library/DxeDtPlatformDtbLoaderLib/DxeDtPlatformDtbKernelLoaderLib.inf
-  }
-  !endif
-!endif
-
-  MdeModulePkg/Universal/PCD/Dxe/Pcd.inf {
-    <LibraryClasses>
-      PcdLib|MdePkg/Library/BasePcdLibNull/BasePcdLibNull.inf
-  }
-
   #
   # Architectural Protocols
   #
@@ -1593,11 +1547,97 @@ CONFIG_FMP_CERTIFICATES_DTB_MAX_SIZE=0
       DebugLib|Silicon/NVIDIA/Library/BaseDebugLibSerialPort/BaseDebugLibSerialPort.inf
   }
 
+  #
+  # ARM GIC & Timer
+  #
+  ArmPkg/Drivers/ArmGicDxe/ArmGicDxe.inf
+  ArmPkg/Drivers/TimerDxe/TimerDxe.inf
+
+!ifdef CONFIG_ARM_WATCHDOG
+  ArmPkg/Drivers/GenericWatchdogDxe/GenericWatchdogDxe.inf {
+    <LibraryClasses>
+      NULL|Silicon/NVIDIA/Library/PlatformIsSiliconLib/PlatformIsSiliconLib.inf
+  }
+  MdeModulePkg/Universal/WatchdogTimerDxe/WatchdogTimer.inf {
+    <LibraryClasses>
+      NULL|Silicon/NVIDIA/Library/PlatformIsPresiliconLib/PlatformIsPresiliconLib.inf
+  }
+!else
+  MdeModulePkg/Universal/WatchdogTimerDxe/WatchdogTimer.inf
+!endif
+  Silicon/NVIDIA/Drivers/BootWatchdog/BootWatchdog.inf
+
+  #
+  # SMMUv3 support
+  #
+!ifdef CONFIG_SMMU_V3
+  Silicon/NVIDIA/Drivers/SmmuV3Dxe/SmmuV3Dxe.inf
+  Silicon/NVIDIA/Drivers/SmmuDriverDxe/SmmuDriverDxe.inf
+!endif
+
+  #
+  # Multiprocessor support
+  #
+  ArmPkg/Drivers/ArmPsciMpServicesDxe/ArmPsciMpServicesDxe.inf
+  Silicon/NVIDIA/Drivers/ThreadingDxe/ThreadingDxe.inf
+
+  #
+  # Serial console driver
+  #
   MdeModulePkg/Universal/Console/ConPlatformDxe/ConPlatformDxe.inf
   MdeModulePkg/Universal/Console/ConSplitterDxe/ConSplitterDxe.inf
   MdeModulePkg/Universal/Console/GraphicsConsoleDxe/GraphicsConsoleDxe.inf
   MdeModulePkg/Universal/Console/TerminalDxe/TerminalDxe.inf
   MdeModulePkg/Universal/PrintDxe/PrintDxe.inf
+
+!ifdef CONFIG_SERIAL_PORT_CONSOLE_MDEMODULE
+  MdeModulePkg/Universal/SerialDxe/SerialDxe.inf
+!endif
+!ifdef CONFIG_SERIAL_PORT_CONSOLE_TEGRA
+  Silicon/NVIDIA/Drivers/TegraUartDxe/TegraUartDxe.inf {
+    <LibraryClasses>
+      TegraCombinedSerialPortLib|Silicon/NVIDIA/Library/TegraCombinedSerialPort/TegraCombinedSerialPortLib.inf
+      TegraUtcSerialPortLib|Silicon/NVIDIA/Library/TegraUtcSerialPortLib/TegraUtcSerialPortLib.inf
+      TegraSbsaSerialPortLib|Silicon/NVIDIA/Library/TegraSbsaSerialPortLib/TegraSbsaSerialPortLib.inf
+      SerialPortLib|Silicon/NVIDIA/Library/TegraSerialPortLib/TegraSerialPortLib.inf
+  }
+!endif
+
+  #
+  # PCD
+  #
+  MdeModulePkg/Universal/PCD/Dxe/Pcd.inf {
+    <LibraryClasses>
+      PcdLib|MdePkg/Library/BasePcdLibNull/BasePcdLibNull.inf
+  }
+
+  #
+  # Firmware Performance Data Table (FPDT)
+  #
+  MdeModulePkg/Universal/ReportStatusCodeRouter/RuntimeDxe/ReportStatusCodeRouterRuntimeDxe.inf
+  MdeModulePkg/Universal/Acpi/FirmwarePerformanceDataTableDxe/FirmwarePerformanceDxe.inf {
+    <LibraryClasses>
+      LockBoxLib|MdeModulePkg/Library/LockBoxNullLib/LockBoxNullLib.inf
+  }
+
+  #
+  # Tegra Platform Configuration
+  #
+  Silicon/NVIDIA/Drivers/TegraPlatformInit/TegraPlatformInitDxe.inf
+
+  #
+  # UEFI Variables
+  #
+
+  #
+  # QSPI Support
+  #
+  Silicon/NVIDIA/Drivers/QspiControllerDxe/QspiControllerDxe.inf
+
+  #
+  # NOR Flash Support
+  #
+  Silicon/NVIDIA/Drivers/NorFlashDxe/NorFlashDxe.inf
 
   Silicon/NVIDIA/Drivers/DefaultVariableDxe/DefaultVariableDxe.inf
 !ifdef CONFIG_VARIABLE_NON_SECURE_SUPPORTED
@@ -1614,10 +1654,249 @@ CONFIG_FMP_CERTIFICATES_DTB_MAX_SIZE=0
   MdeModulePkg/Universal/Variable/RuntimeDxe/VariableSmmRuntimeDxe.inf
 !endif
 
+!ifdef CONFIG_VARIABLE_NON_SECURE_SUPPORTED
+!ifndef CONFIG_VARIABLE_EMULATED
   #
-  # Tegra Platform Configuration
+  # FVB Support
   #
-  Silicon/NVIDIA/Drivers/TegraPlatformInit/TegraPlatformInitDxe.inf
+  Silicon/NVIDIA/Drivers/FvbDxe/FvbDxe.inf
+  Silicon/NVIDIA/Drivers/FvbNorFlashDxe/FvbNorFlashDxe.inf
+  MdeModulePkg/Universal/FaultTolerantWriteDxe/FaultTolerantWriteDxe.inf {
+    <LibraryClasses>
+      NULL|EmbeddedPkg/Library/NvVarStoreFormattedLib/NvVarStoreFormattedLib.inf
+  }
+!endif
+!endif
+
+  #
+  # Lock all variables
+  #
+  Silicon/NVIDIA/Drivers/VarCheckLockAllDxe/VarCheckLockAllDxe.inf
+
+  #
+  # BPMP-FW IPC protocol
+  #
+  Silicon/NVIDIA/Drivers/BpmpIpc/BpmpIpcDxe.inf
+  Silicon/NVIDIA/Drivers/BpmpScmi/BpmpScmiDxe.inf
+  Silicon/NVIDIA/Drivers/BpmpI2c/BpmpI2cDxe.inf
+
+  #
+  # CPU Frequency support
+  #
+  Silicon/NVIDIA/Drivers/TegraCpuFreqDxe/TegraCpuFreqDxe.inf
+  Silicon/NVIDIA/Drivers/CpuFreqMonitor/CpuFreqMonitorDxe.inf
+
+
+  #
+  # Low speed IO
+  #
+
+  #
+  # Tegra Pin Control support
+  #
+  Silicon/NVIDIA/Drivers/TegraPinControlDxe/TegraPinControlDxe.inf
+
+  #
+  # I2C Support
+  #
+  MdeModulePkg/Bus/I2c/I2cDxe/I2cDxe.inf
+  Silicon/NVIDIA/Drivers/TegraI2c/TegraI2cDxe.inf
+
+  #
+  # GPIO driver/utility
+  #
+  Silicon/NVIDIA/Drivers/TegraGpio/TegraGpioDxe.inf
+  Silicon/NVIDIA/Drivers/I2cExpanderGpio/I2cExpanderGpio.inf
+
+  #
+  # Gpio Power Off Driver
+  #
+  Silicon/NVIDIA/Drivers/GpioPowerOffDxe/GpioPowerOffDxe.inf
+
+  #
+  # Gpio Boot Complete Driver
+  #
+  Silicon/NVIDIA/Drivers/GpioBootCompleteDxe/GpioBootCompleteDxe.inf
+
+  #
+  # Regulator support
+  #
+  Silicon/NVIDIA/Drivers/RegulatorDxe/RegulatorDxe.inf
+
+  #
+  # PCIe Support
+  #
+
+  #
+  # Uphy Configuration Driver
+  #
+  Silicon/NVIDIA/Drivers/UphyConfigurationDxe/UphyConfigurationDxe.inf
+
+  #
+  # PCI Support
+  #
+!ifdef CONFIG_PCIE
+  MdeModulePkg/Bus/Pci/PciBusDxe/PciBusDxe.inf
+  MdeModulePkg/Bus/Pci/PciHostBridgeDxe/PciHostBridgeDxe.inf
+  ArmPkg/Drivers/ArmPciCpuIo2Dxe/ArmPciCpuIo2Dxe.inf
+  Silicon/NVIDIA/Drivers/PciGenericControllerDxe/PcieGenericControllerDxe.inf
+!endif
+!ifdef CONFIG_DESIGNWARE_PCIE
+  Silicon/NVIDIA/Drivers/TegraP2UDxe/TegraP2UDxe.inf
+  Silicon/NVIDIA/Drivers/PcieDWControllerDxe/PcieControllerDxe.inf
+!endif
+!ifdef CONFIG_NVIDIA_PCIE
+  Silicon/NVIDIA/Drivers/PcieControllerDxe/PcieControllerDxe.inf
+!endif
+
+  #
+  # Generic non-discoverable pcie used for many soc devices
+  #
+  MdeModulePkg/Bus/Pci/NonDiscoverablePciDeviceDxe/NonDiscoverablePciDeviceDxe.inf
+
+  #
+  # Display hardware
+  #
+!ifdef CONFIG_NVIDIA_DISPLAY
+  Silicon/NVIDIA/Drivers/NonDiscoverablePciDeviceDxe/NonDiscoverablePciDeviceDxe.inf
+  Silicon/NVIDIA/Drivers/NvDisplayControllerDxe/NvDisplayControllerDxe.inf
+  !ifdef CONFIG_SOC_T26X
+    Silicon/NVIDIA/Drivers/NvGopDriver/nvgop-gb1xx-platform.inf
+  !endif
+!endif
+
+  #
+  # Platform To Driver Configuration Support
+  #
+  Silicon/NVIDIA/Drivers/PlatformToDriverConfiguration/PlatformToDriverConfiguration.inf
+
+  #
+  # ACPI/SMBIOS
+  #
+!ifdef CONFIG_ACPI
+  #
+  # Aml Generation
+  #
+  Silicon/NVIDIA/Drivers/AmlGenerationDxe/AmlGenerationDxe.inf
+
+  #
+  # Aml Patching
+  #
+  Silicon/NVIDIA/Drivers/AmlPatchDxe/AmlPatchDxe.inf
+
+  #
+  # ACPI Support
+  #
+  MdeModulePkg/Universal/Acpi/AcpiTableDxe/AcpiTableDxe.inf {
+    <LibraryClasses>
+!ifdef CONFIG_DEVICETREE
+      NULL|EmbeddedPkg/Library/PlatformHasAcpiLib/PlatformHasAcpiLib.inf
+!endif
+  }
+!endif
+
+  #
+  # Logo support
+  #
+!ifdef CONFIG_LOGO
+  $(CONFIG_LOGO_IMPLEMENTER)
+!ifdef CONFIG_ACPI
+  MdeModulePkg/Universal/Acpi/BootGraphicsResourceTableDxe/BootGraphicsResourceTableDxe.inf
+!endif
+!endif
+
+  #
+  # SMBIOS/DMI
+  #
+!ifdef CONFIG_SMBIOS
+  MdeModulePkg/Universal/SmbiosDxe/SmbiosDxe.inf
+!endif
+!ifdef CONFIG_SMBIOS_ARM
+  ArmPkg/Universal/Smbios/SmbiosMiscDxe/SmbiosMiscDxe.inf
+  Silicon/NVIDIA/Drivers/SmbiosOemDxe/SmbiosMiscOemDxe/SmbiosMiscOemDxe.inf
+  ArmPkg/Universal/Smbios/ProcessorSubClassDxe/ProcessorSubClassDxe.inf
+!endif
+
+  #
+  # FDT Support
+  #
+!ifdef CONFIG_DEVICETREE
+  !ifdef CONFIG_ACPI
+  EmbeddedPkg/Drivers/DtPlatformDxe/DtPlatformDxe.inf {
+    <LibraryClasses>
+      DtPlatformDtbLoaderLib|Silicon/NVIDIA/Library/DxeDtPlatformDtbLoaderLib/DxeDtPlatformDtbKernelLoaderLib.inf
+  }
+  !else
+  Silicon/NVIDIA/Drivers/DtOnlyPlatformDxe/DtOnlyPlatformDxe.inf {
+    <LibraryClasses>
+      DtPlatformDtbLoaderLib|Silicon/NVIDIA/Library/DxeDtPlatformDtbLoaderLib/DxeDtPlatformDtbKernelLoaderLib.inf
+  }
+  !endif
+!endif
+
+  #
+  # IPMI/BMC
+  #
+
+!ifdef CONFIG_IPMI_BMC
+  Silicon/NVIDIA/Drivers/I2cIoBmcSsifDxe/I2cIoBmcSsifDxe.inf
+  Silicon/NVIDIA/Drivers/ArmSbmrStatusCodeDxe/ArmSbmrStatusCodeDxe.inf
+  Silicon/NVIDIA/Drivers/OemDescStatusCodeDxe/OemDescStatusCodeDxe.inf {
+    <LibraryClasses>
+      DebugLib|Silicon/NVIDIA/Library/BaseDebugLibSerialPort/BaseDebugLibSerialPort.inf
+  }
+
+  Silicon/NVIDIA/Drivers/ResetNotifyRuntimeDxe/ResetNotifyRuntimeDxe.inf
+  IpmiFeaturePkg/Frb/FrbDxe.inf
+
+  #
+  # IPMI Null Driver
+  #
+  Silicon/NVIDIA/Drivers/IpmiNullDxe/IpmiNullDxe.inf
+
+  #
+  # Ipmi Blob Transfer support
+  #
+  Silicon/NVIDIA/Drivers/IpmiBlobTransferDxe/IpmiBlobTransferDxe.inf
+  Silicon/NVIDIA/Drivers/SmbiosBmcTransfer/SmbiosBmcTransfer.inf
+  Silicon/NVIDIA/Drivers/SmbiosHmcTransfer/SmbiosHmcTransfer.inf
+!endif
+
+  #
+  # Bds
+  #
+  MdeModulePkg/Universal/DevicePathDxe/DevicePathDxe.inf
+  MdeModulePkg/Universal/DisplayEngineDxe/DisplayEngineDxe.inf
+  MdeModulePkg/Universal/BdsDxe/BdsDxe.inf {
+    <LibraryClasses>
+!ifdef CONFIG_BOOT_NVIDIA_CUSTOM_OPTION_DESCRIPTION
+      NULL|Silicon/NVIDIA/Library/PlatformBootManagerBootDescriptionLib/PlatformBootManagerBootDescriptionLib.inf
+!endif
+  }
+!ifndef CONFIG_BOOT_UI_MENU_DISABLED
+  MdeModulePkg/Universal/SetupBrowserDxe/SetupBrowserDxe.inf
+  MdeModulePkg/Application/BootManagerMenuApp/BootManagerMenuApp.inf
+  MdeModulePkg/Application/UiApp/UiApp.inf {
+    <LibraryClasses>
+      NULL|MdeModulePkg/Library/DeviceManagerUiLib/DeviceManagerUiLib.inf
+      NULL|MdeModulePkg/Library/BootManagerUiLib/BootManagerUiLib.inf
+      NULL|MdeModulePkg/Library/BootMaintenanceManagerUiLib/BootMaintenanceManagerUiLib.inf
+!ifdef CONFIG_BOOT_NVIDIA_CUSTOM_OPTION_DESCRIPTION
+      NULL|Silicon/NVIDIA/Library/PlatformBootManagerBootDescriptionLib/PlatformBootManagerBootDescriptionLib.inf
+!endif
+      NULL|Silicon/NVIDIA/Library/UiMenuStartupLib/UiMenuStartupLib.inf
+  }
+  MdeModulePkg/Universal/DriverHealthManagerDxe/DriverHealthManagerDxe.inf
+!endif
+
+  MdeModulePkg/Universal/HiiDatabaseDxe/HiiDatabaseDxe.inf
+
+!ifdef CONFIG_BOOTLOADER_RAMDISK
+  #
+  # Ramloaded OS
+  #
+  Silicon/NVIDIA/Drivers/RamDiskOS/RamDiskOS.inf
+!endif
 
   #
   # Platform Configuration Manager Data
@@ -1687,127 +1966,67 @@ CONFIG_FMP_CERTIFICATES_DTB_MAX_SIZE=0
     <BuildOptions>
       *_*_*_PLATFORM_FLAGS = -I$(BIN_DIR)/Silicon/NVIDIA/Drivers/ConfigurationManagerData/AcpiTableList/PlatformASLTablesLib/PlatformASLTablesLib/OUTPUT -I$(BIN_DIR)/Silicon/NVIDIA/Library/ASLTemplateTablesLib/ASLTemplateTablesLib/OUTPUT
   }
-!endif
 
   #
-  # BPMP-FW IPC protocol
+  # Dynamic Table Factory Dxe
   #
-  Silicon/NVIDIA/Drivers/BpmpIpc/BpmpIpcDxe.inf
-  Silicon/NVIDIA/Drivers/BpmpScmi/BpmpScmiDxe.inf
-  Silicon/NVIDIA/Drivers/BpmpI2c/BpmpI2cDxe.inf
-
-  #
-  # GPIO driver/utility
-  #
-  Silicon/NVIDIA/Drivers/TegraGpio/TegraGpioDxe.inf
-  Silicon/NVIDIA/Drivers/I2cExpanderGpio/I2cExpanderGpio.inf
-
-  #
-  # I2C Support
-  #
-  MdeModulePkg/Bus/I2c/I2cDxe/I2cDxe.inf
-  Silicon/NVIDIA/Drivers/TegraI2c/TegraI2cDxe.inf
-
-!ifdef CONFIG_IPMI_BMC
-  Silicon/NVIDIA/Drivers/I2cIoBmcSsifDxe/I2cIoBmcSsifDxe.inf
-  Silicon/NVIDIA/Drivers/ArmSbmrStatusCodeDxe/ArmSbmrStatusCodeDxe.inf
-  Silicon/NVIDIA/Drivers/OemDescStatusCodeDxe/OemDescStatusCodeDxe.inf {
+  DynamicTablesPkg/Drivers/DynamicTableFactoryDxe/DynamicTableFactoryDxe.inf {
     <LibraryClasses>
-      DebugLib|Silicon/NVIDIA/Library/BaseDebugLibSerialPort/BaseDebugLibSerialPort.inf
-  }
-
-  Silicon/NVIDIA/Drivers/ResetNotifyRuntimeDxe/ResetNotifyRuntimeDxe.inf
-  IpmiFeaturePkg/Frb/FrbDxe.inf
-
-  #
-  # IPMI Null Driver
-  #
-  Silicon/NVIDIA/Drivers/IpmiNullDxe/IpmiNullDxe.inf
-
-  #
-  # Ipmi Blob Transfer support
-  #
-  Silicon/NVIDIA/Drivers/IpmiBlobTransferDxe/IpmiBlobTransferDxe.inf
-  Silicon/NVIDIA/Drivers/SmbiosBmcTransfer/SmbiosBmcTransfer.inf
-  Silicon/NVIDIA/Drivers/SmbiosHmcTransfer/SmbiosHmcTransfer.inf
-!endif
-
-  #
-  # Logo support
-  #
-!ifdef CONFIG_LOGO
-  $(CONFIG_LOGO_IMPLEMENTER)
 !ifdef CONFIG_ACPI
-  MdeModulePkg/Universal/Acpi/BootGraphicsResourceTableDxe/BootGraphicsResourceTableDxe.inf
-!endif
+      NULL|DynamicTablesPkg/Library/Acpi/Common/AcpiDbg2Lib/AcpiDbg2Lib.inf
+      NULL|DynamicTablesPkg/Library/Acpi/Common/AcpiFadtLib/AcpiFadtLib.inf
+      NULL|DynamicTablesPkg/Library/Acpi/Arm/AcpiGtdtLibArm/AcpiGtdtLibArm.inf
+      NULL|DynamicTablesPkg/Library/Acpi/Arm/AcpiIortLibArm/AcpiIortLibArm.inf
+      NULL|DynamicTablesPkg/Library/Acpi/Arm/AcpiMadtLibArm/AcpiMadtLibArm.inf
+      NULL|DynamicTablesPkg/Library/Acpi/Common/AcpiMcfgLib/AcpiMcfgLib.inf
+      NULL|DynamicTablesPkg/Library/Acpi/Arm/AcpiMpamLibArm/AcpiMpamLibArm.inf
+      NULL|DynamicTablesPkg/Library/Acpi/Common/AcpiPpttLib/AcpiPpttLib.inf
+      NULL|DynamicTablesPkg/Library/Acpi/Common/AcpiRawLib/AcpiRawLib.inf
+      NULL|DynamicTablesPkg/Library/Acpi/Common/AcpiSpcrLib/AcpiSpcrLib.inf
+      NULL|DynamicTablesPkg/Library/Acpi/Common/AcpiSratLib/AcpiSratLib.inf
+      NULL|DynamicTablesPkg/Library/Acpi/Common/AcpiSpmiLib/AcpiSpmiLib.inf
+      NULL|DynamicTablesPkg/Library/Acpi/Common/AcpiTpm2Lib/AcpiTpm2Lib.inf
+      NULL|DynamicTablesPkg/Library/Acpi/Common/AcpiSsdtCpuTopologyLib/SsdtCpuTopologyLib.inf
+      NULL|DynamicTablesPkg/Library/Acpi/Common/AcpiSsdtPcieLib/SsdtPcieLib.inf
+      NULL|DynamicTablesPkg/Library/Acpi/Arm/AcpiSsdtGenericDeviceLibArm/AcpiSsdtGenericDeviceLibArm.inf
+      # AML Fixup
+      NULL|DynamicTablesPkg/Library/Acpi/Common/AcpiSsdtSerialPortLib/SsdtSerialPortLib.inf
 !endif
 
-  #
-  # SMBIOS/DMI
-  #
-!ifdef CONFIG_SMBIOS
-  MdeModulePkg/Universal/SmbiosDxe/SmbiosDxe.inf
-!endif
-!ifdef CONFIG_SMBIOS_ARM
-  ArmPkg/Universal/Smbios/SmbiosMiscDxe/SmbiosMiscDxe.inf
-  Silicon/NVIDIA/Drivers/SmbiosOemDxe/SmbiosMiscOemDxe/SmbiosMiscOemDxe.inf
-  ArmPkg/Universal/Smbios/ProcessorSubClassDxe/ProcessorSubClassDxe.inf
-!endif
-
-  #
-  # Bds
-  #
-  MdeModulePkg/Universal/DevicePathDxe/DevicePathDxe.inf
-  MdeModulePkg/Universal/DisplayEngineDxe/DisplayEngineDxe.inf
-  MdeModulePkg/Universal/BdsDxe/BdsDxe.inf {
-    <LibraryClasses>
-!ifdef CONFIG_BOOT_NVIDIA_CUSTOM_OPTION_DESCRIPTION
-      NULL|Silicon/NVIDIA/Library/PlatformBootManagerBootDescriptionLib/PlatformBootManagerBootDescriptionLib.inf
+!ifdef CONFIG_SMBIOS_DYNAMICTABLESPKG
+      NULL|DynamicTablesPkg/Library/Smbios/SmbiosType1Lib/SmbiosType1Lib.inf
+      NULL|DynamicTablesPkg/Library/Smbios/SmbiosType0Lib/SmbiosType0Lib.inf
+      NULL|DynamicTablesPkg/Library/Smbios/SmbiosType2Lib/SmbiosType2Lib.inf
+      NULL|DynamicTablesPkg/Library/Smbios/SmbiosType3Lib/SmbiosType3Lib.inf
+      NULL|DynamicTablesPkg/Library/Smbios/SmbiosType8Lib/SmbiosType8Lib.inf
+      NULL|DynamicTablesPkg/Library/Smbios/SmbiosType9Lib/SmbiosType9Lib.inf
+      NULL|DynamicTablesPkg/Library/Smbios/SmbiosType11Lib/SmbiosType11Lib.inf
+      NULL|DynamicTablesPkg/Library/Smbios/SmbiosType13Lib/SmbiosType13Lib.inf
+      NULL|DynamicTablesPkg/Library/Smbios/SmbiosType14Lib/SmbiosType14Lib.inf
+      NULL|DynamicTablesPkg/Library/Smbios/SmbiosType32Lib/SmbiosType32Lib.inf
+      NULL|DynamicTablesPkg/Library/Smbios/SmbiosType38Lib/SmbiosType38Lib.inf
+      NULL|DynamicTablesPkg/Library/Smbios/SmbiosType39Lib/SmbiosType39Lib.inf
+      NULL|DynamicTablesPkg/Library/Smbios/SmbiosType41Lib/SmbiosType41Lib.inf
+      NULL|DynamicTablesPkg/Library/Smbios/SmbiosType43Lib/SmbiosType43Lib.inf
+      NULL|DynamicTablesPkg/Library/Smbios/SmbiosType45Lib/SmbiosType45Lib.inf
+      NULL|DynamicTablesPkg/Library/Smbios/SmbiosType16Lib/SmbiosType16Lib.inf
+      NULL|DynamicTablesPkg/Library/Smbios/SmbiosType17Lib/SmbiosType17Lib.inf
+      NULL|DynamicTablesPkg/Library/Smbios/SmbiosType19Lib/SmbiosType19Lib.inf
+      NULL|DynamicTablesPkg/Library/Smbios/SmbiosType4Lib/SmbiosType4Lib.inf
+      NULL|DynamicTablesPkg/Library/Smbios/SmbiosType7Lib/SmbiosType7Lib.inf
 !endif
   }
-!ifndef CONFIG_BOOT_UI_MENU_DISABLED
-  MdeModulePkg/Universal/SetupBrowserDxe/SetupBrowserDxe.inf
-  MdeModulePkg/Application/BootManagerMenuApp/BootManagerMenuApp.inf
-  MdeModulePkg/Application/UiApp/UiApp.inf {
-    <LibraryClasses>
-      NULL|MdeModulePkg/Library/DeviceManagerUiLib/DeviceManagerUiLib.inf
-      NULL|MdeModulePkg/Library/BootManagerUiLib/BootManagerUiLib.inf
-      NULL|MdeModulePkg/Library/BootMaintenanceManagerUiLib/BootMaintenanceManagerUiLib.inf
-!ifdef CONFIG_BOOT_NVIDIA_CUSTOM_OPTION_DESCRIPTION
-      NULL|Silicon/NVIDIA/Library/PlatformBootManagerBootDescriptionLib/PlatformBootManagerBootDescriptionLib.inf
-!endif
-      NULL|Silicon/NVIDIA/Library/UiMenuStartupLib/UiMenuStartupLib.inf
-  }
-  MdeModulePkg/Universal/DriverHealthManagerDxe/DriverHealthManagerDxe.inf
-!endif
-
-  MdeModulePkg/Universal/HiiDatabaseDxe/HiiDatabaseDxe.inf
-
-  ArmPkg/Drivers/ArmGicDxe/ArmGicDxe.inf
-  ArmPkg/Drivers/TimerDxe/TimerDxe.inf
-
-!ifdef CONFIG_ARM_WATCHDOG
-  ArmPkg/Drivers/GenericWatchdogDxe/GenericWatchdogDxe.inf {
-    <LibraryClasses>
-      NULL|Silicon/NVIDIA/Library/PlatformIsSiliconLib/PlatformIsSiliconLib.inf
-  }
-  MdeModulePkg/Universal/WatchdogTimerDxe/WatchdogTimer.inf {
-    <LibraryClasses>
-      NULL|Silicon/NVIDIA/Library/PlatformIsPresiliconLib/PlatformIsPresiliconLib.inf
-  }
-!else
-  MdeModulePkg/Universal/WatchdogTimerDxe/WatchdogTimer.inf
-!endif
-  Silicon/NVIDIA/Drivers/BootWatchdog/BootWatchdog.inf
 
   #
-  # Firmware Performance Data Table (FPDT)
+  # Dynamic Tables Manager Dxe
   #
-  MdeModulePkg/Universal/ReportStatusCodeRouter/RuntimeDxe/ReportStatusCodeRouterRuntimeDxe.inf
-  MdeModulePkg/Universal/Acpi/FirmwarePerformanceDataTableDxe/FirmwarePerformanceDxe.inf {
-    <LibraryClasses>
-      LockBoxLib|MdeModulePkg/Library/LockBoxNullLib/LockBoxNullLib.inf
-  }
+  DynamicTablesPkg/Drivers/DynamicTableManagerDxe/DynamicTableManagerDxe.inf
+  #
+  # Configuration Manager
+  #
+  Silicon/NVIDIA/Drivers/ConfigurationManagerTokenDxe/ConfigurationManagerTokenDxe.inf
+  Silicon/NVIDIA/Drivers/ConfigurationManager/ConfigurationManagerDxe.inf
+!endif
 
   #
   # Networking stack
@@ -1909,6 +2128,14 @@ CONFIG_FMP_CERTIFICATES_DTB_MAX_SIZE=0
   Silicon/NVIDIA/Drivers/BmcNic/UsbLanJanitor/UsbLanJanitorDxe.inf
 !endif
 
+  #
+  # HTTP boot support requires RamDiskDxe
+  MdeModulePkg/Universal/Disk/RamDiskDxe/RamDiskDxe.inf
+
+  #
+  # Storage
+  #
+
   # Filesystems
 !ifdef CONFIG_FS_FIRMWARE_VOLUME
   MdeModulePkg/Universal/FvSimpleFileSystemDxe/FvSimpleFileSystemDxe.inf
@@ -1924,39 +2151,6 @@ CONFIG_FMP_CERTIFICATES_DTB_MAX_SIZE=0
   MdeModulePkg/Universal/Disk/PartitionDxe/PartitionDxe.inf
   MdeModulePkg/Universal/Disk/UnicodeCollation/EnglishDxe/EnglishDxe.inf
   MdeModulePkg/Universal/Disk/UdfDxe/UdfDxe.inf
-
-  #
-  # Serial console driver
-  #
-!ifdef CONFIG_SERIAL_PORT_CONSOLE_MDEMODULE
-  MdeModulePkg/Universal/SerialDxe/SerialDxe.inf
-!endif
-!ifdef CONFIG_SERIAL_PORT_CONSOLE_TEGRA
-  Silicon/NVIDIA/Drivers/TegraUartDxe/TegraUartDxe.inf {
-    <LibraryClasses>
-      TegraCombinedSerialPortLib|Silicon/NVIDIA/Library/TegraCombinedSerialPort/TegraCombinedSerialPortLib.inf
-      TegraUtcSerialPortLib|Silicon/NVIDIA/Library/TegraUtcSerialPortLib/TegraUtcSerialPortLib.inf
-      TegraSbsaSerialPortLib|Silicon/NVIDIA/Library/TegraSbsaSerialPortLib/TegraSbsaSerialPortLib.inf
-      SerialPortLib|Silicon/NVIDIA/Library/TegraSerialPortLib/TegraSerialPortLib.inf
-  }
-!endif
-
-  #
-  # PCI Support
-  #
-!ifdef CONFIG_PCIE
-  MdeModulePkg/Bus/Pci/PciBusDxe/PciBusDxe.inf
-  MdeModulePkg/Bus/Pci/PciHostBridgeDxe/PciHostBridgeDxe.inf
-  ArmPkg/Drivers/ArmPciCpuIo2Dxe/ArmPciCpuIo2Dxe.inf
-  Silicon/NVIDIA/Drivers/PciGenericControllerDxe/PcieGenericControllerDxe.inf
-!endif
-!ifdef CONFIG_DESIGNWARE_PCIE
-  Silicon/NVIDIA/Drivers/TegraP2UDxe/TegraP2UDxe.inf
-  Silicon/NVIDIA/Drivers/PcieDWControllerDxe/PcieControllerDxe.inf
-!endif
-!ifdef CONFIG_NVIDIA_PCIE
-  Silicon/NVIDIA/Drivers/PcieControllerDxe/PcieControllerDxe.inf
-!endif
 
   #
   # NVMe boot devices
@@ -2057,20 +2251,32 @@ CONFIG_FMP_CERTIFICATES_DTB_MAX_SIZE=0
 !endif
 
   #
-  # Generic non-discoverable pcie used for many soc devices
+  # RAS
   #
-  MdeModulePkg/Bus/Pci/NonDiscoverablePciDeviceDxe/NonDiscoverablePciDeviceDxe.inf
+
+!ifdef CONFIG_RAS
+  #
+  # APEI
+  #
+  Silicon/NVIDIA/Server/TH500/Drivers/ApeiDxe/Apei.inf {
+    <LibraryClasses>
+      BaseMemoryLib|MdePkg/Library/BaseMemoryLib/BaseMemoryLib.inf
+  }
+!endif
+
+!ifdef CONFIG_RAS_SMBIOS_MODULE
+  #
+  # RAS SMBIOS module
+  #
+  Silicon/NVIDIA/Server/TH500/Drivers/SmbiosRasTransfer/SmbiosRasTransfer.inf {
+    <LibraryClasses>
+      SecureFwCommLib|Silicon/NVIDIA/Server/TH500/Library/SecureFwCommLib/SecureFwCommLib.inf
+    }
+!endif
 
   #
-  # Display hardware
+  # SoC specific components
   #
-!ifdef CONFIG_NVIDIA_DISPLAY
-  Silicon/NVIDIA/Drivers/NonDiscoverablePciDeviceDxe/NonDiscoverablePciDeviceDxe.inf
-  Silicon/NVIDIA/Drivers/NvDisplayControllerDxe/NvDisplayControllerDxe.inf
-  !ifdef CONFIG_SOC_T26X
-    Silicon/NVIDIA/Drivers/NvGopDriver/nvgop-gb1xx-platform.inf
-  !endif
-!endif
 
   #
   # SE RNG
@@ -2101,23 +2307,6 @@ CONFIG_FMP_CERTIFICATES_DTB_MAX_SIZE=0
   Silicon/NVIDIA/Drivers/BasicProfilerDxe/BasicProfilerDxe.inf
 !endif
 
-!ifdef CONFIG_RAS
-  #
-  # APEI
-  #
-  Silicon/NVIDIA/Server/TH500/Drivers/ApeiDxe/Apei.inf {
-    <LibraryClasses>
-      BaseMemoryLib|MdePkg/Library/BaseMemoryLib/BaseMemoryLib.inf
-  }
-!endif
-
-!ifdef CONFIG_BOOTLOADER_RAMDISK
-  #
-  # Ramloaded OS
-  #
-  Silicon/NVIDIA/Drivers/RamDiskOS/RamDiskOS.inf
-!endif
-
 !ifdef CONFIG_SOC_T24X
   #
   # GH100 GPU Driver
@@ -2138,9 +2327,59 @@ CONFIG_FMP_CERTIFICATES_DTB_MAX_SIZE=0
 !endif
 
   #
-  # Lock all variables
+  # Firmware Updates
   #
-  Silicon/NVIDIA/Drivers/VarCheckLockAllDxe/VarCheckLockAllDxe.inf
+
+!ifdef CONFIG_FIRMWARE_CAPSULE_SUPPORTED
+  #
+  # Capsule Application
+  #
+  MdeModulePkg/Application/CapsuleApp/CapsuleApp.inf
+!endif
+
+!ifdef CONFIG_RUNTIME_FIRMWARE_CAPSULE_SUPPORTED
+  Silicon/NVIDIA/Drivers/NvidiaCapsuleRuntimeDxe/NvidiaCapsuleRuntimeDxe.inf
+!endif
+
+  #
+  # Capsule Update Policy Protocol
+  #
+  Silicon/NVIDIA/Drivers/CapsuleUpdatePolicyDxe/CapsuleUpdatePolicyDxe.inf
+
+!ifdef CONFIG_FIRMWARE_MANAGEMENT
+  #
+  # Esrt - EFI System Resource Table
+  #
+  MdeModulePkg/Universal/EsrtFmpDxe/EsrtFmpDxe.inf
+
+  #
+  # Fmp
+  #
+  FmpDevicePkg/FmpDxe/FmpDxe.inf {
+    <Defines>
+      #
+      # FILE_GUID is used as ESRT GUID
+      #
+      FILE_GUID = $(FMP_SYSTEM_IMAGE_TYPE_ID)
+
+!ifdef CONFIG_BUILD_ANDROID
+    <LibraryClasses>
+      NULL|Silicon/NVIDIA/Library/DepexLib/DepexAndroidFmpInitComplete.inf
+!endif
+  }
+!endif
+
+!ifdef CONFIG_FIRMWARE_MANAGEMENT_EROT
+  #
+  # NS ERoT
+  #
+  Silicon/NVIDIA/Drivers/ErotQspiDxe/ErotQspiDxe.inf
+
+  #
+  # MM MCTP
+  #
+  Silicon/NVIDIA/Drivers/MctpMmDxe/MctpMmDxe.inf
+!endif
 
   #
   # UEFI application (Shell Embedded Boot Loader)
@@ -2196,16 +2435,6 @@ CONFIG_FMP_CERTIFICATES_DTB_MAX_SIZE=0
   MdeModulePkg/Application/VariableInfo/VariableInfo.inf
   Silicon/NVIDIA/Application/HiiKeywordUtil/HiiKeywordUtil.inf
 
-!ifdef CONFIG_FIRMWARE_CAPSULE_SUPPORTED
-  #
-  # Capsule Application
-  #
-  MdeModulePkg/Application/CapsuleApp/CapsuleApp.inf
-!endif
-!ifdef CONFIG_RUNTIME_FIRMWARE_CAPSULE_SUPPORTED
-  Silicon/NVIDIA/Drivers/NvidiaCapsuleRuntimeDxe/NvidiaCapsuleRuntimeDxe.inf
-!endif
-
   #
   # Test Applications
   #
@@ -2250,12 +2479,13 @@ CONFIG_FMP_CERTIFICATES_DTB_MAX_SIZE=0
 !endif
 !endif
 
-!ifdef CONFIG_SECURITY_UEFI_SECURE_BOOT
   #
-  # Default Security Key Enrollment Application.
+  # Memory Tests
   #
-  SecurityPkg/EnrollFromDefaultKeysApp/EnrollFromDefaultKeysApp.inf
+!ifdef CONFIG_MEMORY_TEST
+  Silicon/NVIDIA/Drivers/GenericMpMemoryTestDxe/GenericMemoryTestDxe.inf
 !endif
+
 
 !ifdef CONFIG_FIRMWARE_PARTITION_SUPPORT
   #
@@ -2266,106 +2496,11 @@ CONFIG_FMP_CERTIFICATES_DTB_MAX_SIZE=0
   Silicon/NVIDIA/Drivers/FwImageDxe/FwImageDxe.inf
 !endif
 
-!ifdef CONFIG_FIRMWARE_MANAGEMENT
-  #
-  # Esrt - EFI System Resource Table
-  #
-  MdeModulePkg/Universal/EsrtFmpDxe/EsrtFmpDxe.inf
-
-  #
-  # Fmp
-  #
-  FmpDevicePkg/FmpDxe/FmpDxe.inf {
-    <Defines>
-      #
-      # FILE_GUID is used as ESRT GUID
-      #
-      FILE_GUID = $(FMP_SYSTEM_IMAGE_TYPE_ID)
-
-!ifdef CONFIG_BUILD_ANDROID
-    <LibraryClasses>
-      NULL|Silicon/NVIDIA/Library/DepexLib/DepexAndroidFmpInitComplete.inf
-!endif
-  }
-!endif
-!ifdef CONFIG_FIRMWARE_MANAGEMENT_EROT
-  #
-  # NS ERoT
-  #
-  Silicon/NVIDIA/Drivers/ErotQspiDxe/ErotQspiDxe.inf
-
-  #
-  # MM MCTP
-  #
-  Silicon/NVIDIA/Drivers/MctpMmDxe/MctpMmDxe.inf
-!endif
 !ifdef CONFIG_FIRMWARE_PARTITION_MM_DXE_DRIVER
   #
   # FW Partition MM driver
   #
   Silicon/NVIDIA/Drivers/FwPartitionMmDxe/FwPartitionMmDxe.inf
-!endif
-
-!ifdef CONFIG_CONFIG_MANAGER
-  #
-  # Dynamic Table Factory Dxe
-  #
-  DynamicTablesPkg/Drivers/DynamicTableFactoryDxe/DynamicTableFactoryDxe.inf {
-    <LibraryClasses>
-!ifdef CONFIG_ACPI
-      NULL|DynamicTablesPkg/Library/Acpi/Common/AcpiDbg2Lib/AcpiDbg2Lib.inf
-      NULL|DynamicTablesPkg/Library/Acpi/Common/AcpiFadtLib/AcpiFadtLib.inf
-      NULL|DynamicTablesPkg/Library/Acpi/Arm/AcpiGtdtLibArm/AcpiGtdtLibArm.inf
-      NULL|DynamicTablesPkg/Library/Acpi/Arm/AcpiIortLibArm/AcpiIortLibArm.inf
-      NULL|DynamicTablesPkg/Library/Acpi/Arm/AcpiMadtLibArm/AcpiMadtLibArm.inf
-      NULL|DynamicTablesPkg/Library/Acpi/Common/AcpiMcfgLib/AcpiMcfgLib.inf
-      NULL|DynamicTablesPkg/Library/Acpi/Arm/AcpiMpamLibArm/AcpiMpamLibArm.inf
-      NULL|DynamicTablesPkg/Library/Acpi/Common/AcpiPpttLib/AcpiPpttLib.inf
-      NULL|DynamicTablesPkg/Library/Acpi/Common/AcpiRawLib/AcpiRawLib.inf
-      NULL|DynamicTablesPkg/Library/Acpi/Common/AcpiSpcrLib/AcpiSpcrLib.inf
-      NULL|DynamicTablesPkg/Library/Acpi/Common/AcpiSratLib/AcpiSratLib.inf
-      NULL|DynamicTablesPkg/Library/Acpi/Common/AcpiSpmiLib/AcpiSpmiLib.inf
-      NULL|DynamicTablesPkg/Library/Acpi/Common/AcpiTpm2Lib/AcpiTpm2Lib.inf
-      NULL|DynamicTablesPkg/Library/Acpi/Common/AcpiSsdtCpuTopologyLib/SsdtCpuTopologyLib.inf
-      NULL|DynamicTablesPkg/Library/Acpi/Common/AcpiSsdtPcieLib/SsdtPcieLib.inf
-      NULL|DynamicTablesPkg/Library/Acpi/Arm/AcpiSsdtGenericDeviceLibArm/AcpiSsdtGenericDeviceLibArm.inf
-      # AML Fixup
-      NULL|DynamicTablesPkg/Library/Acpi/Common/AcpiSsdtSerialPortLib/SsdtSerialPortLib.inf
-!endif
-
-!ifdef CONFIG_SMBIOS_DYNAMICTABLESPKG
-      NULL|DynamicTablesPkg/Library/Smbios/SmbiosType1Lib/SmbiosType1Lib.inf
-      NULL|DynamicTablesPkg/Library/Smbios/SmbiosType0Lib/SmbiosType0Lib.inf
-      NULL|DynamicTablesPkg/Library/Smbios/SmbiosType2Lib/SmbiosType2Lib.inf
-      NULL|DynamicTablesPkg/Library/Smbios/SmbiosType3Lib/SmbiosType3Lib.inf
-      NULL|DynamicTablesPkg/Library/Smbios/SmbiosType8Lib/SmbiosType8Lib.inf
-      NULL|DynamicTablesPkg/Library/Smbios/SmbiosType9Lib/SmbiosType9Lib.inf
-      NULL|DynamicTablesPkg/Library/Smbios/SmbiosType11Lib/SmbiosType11Lib.inf
-      NULL|DynamicTablesPkg/Library/Smbios/SmbiosType13Lib/SmbiosType13Lib.inf
-      NULL|DynamicTablesPkg/Library/Smbios/SmbiosType14Lib/SmbiosType14Lib.inf
-      NULL|DynamicTablesPkg/Library/Smbios/SmbiosType32Lib/SmbiosType32Lib.inf
-      NULL|DynamicTablesPkg/Library/Smbios/SmbiosType38Lib/SmbiosType38Lib.inf
-      NULL|DynamicTablesPkg/Library/Smbios/SmbiosType39Lib/SmbiosType39Lib.inf
-      NULL|DynamicTablesPkg/Library/Smbios/SmbiosType41Lib/SmbiosType41Lib.inf
-      NULL|DynamicTablesPkg/Library/Smbios/SmbiosType43Lib/SmbiosType43Lib.inf
-      NULL|DynamicTablesPkg/Library/Smbios/SmbiosType45Lib/SmbiosType45Lib.inf
-      NULL|DynamicTablesPkg/Library/Smbios/SmbiosType16Lib/SmbiosType16Lib.inf
-      NULL|DynamicTablesPkg/Library/Smbios/SmbiosType17Lib/SmbiosType17Lib.inf
-      NULL|DynamicTablesPkg/Library/Smbios/SmbiosType19Lib/SmbiosType19Lib.inf
-      NULL|DynamicTablesPkg/Library/Smbios/SmbiosType4Lib/SmbiosType4Lib.inf
-      NULL|DynamicTablesPkg/Library/Smbios/SmbiosType7Lib/SmbiosType7Lib.inf
-!endif
-  }
-
-  #
-  # Dynamic Tables Manager Dxe
-  #
-  DynamicTablesPkg/Drivers/DynamicTableManagerDxe/DynamicTableManagerDxe.inf
-  #
-  # Configuration Manager
-  #
-  Silicon/NVIDIA/Drivers/ConfigurationManagerTokenDxe/ConfigurationManagerTokenDxe.inf
-  Silicon/NVIDIA/Drivers/ConfigurationManager/ConfigurationManagerDxe.inf
 !endif
 
   #
@@ -2374,28 +2509,10 @@ CONFIG_FMP_CERTIFICATES_DTB_MAX_SIZE=0
   Silicon/NVIDIA/Drivers/TegraPlatformBootManager/TegraPlatformBootManagerDxe.inf
 
   #
-  # HTTP boot support requires RamDiskDxe
-  MdeModulePkg/Universal/Disk/RamDiskDxe/RamDiskDxe.inf
-
-  #
   # Custom HII Support
   #
   Silicon/NVIDIA/Drivers/NvidiaConfigDxe/NvidiaConfigDxe.inf
 
-!ifdef CONFIG_SECURITY_UEFI_SECURE_BOOT
-  #
-  # Secure Boot Support
-  #
-  SecurityPkg/VariableAuthenticated/SecureBootConfigDxe/SecureBootConfigDxe.inf
-!endif
-
-
-!ifdef CONFIG_SECURITY_UEFI_SECURE_BOOT_BMC_EVENT_REPORT
-  #
-  # Secure Boot Event Reporting.
-  #
-  Silicon/NVIDIA/Drivers/SecureBootBmcEvent/SecureBootBmcEvent.inf
-!endif
 
   #
   # Security drivers
@@ -2404,6 +2521,28 @@ CONFIG_FMP_CERTIFICATES_DTB_MAX_SIZE=0
 !ifdef CONFIG_SECURITY_UEFI_SECURE_BOOT
   SecurityPkg/Hash2DxeCrypto/Hash2DxeCrypto.inf
   SecurityPkg/Pkcs7Verify/Pkcs7VerifyDxe/Pkcs7VerifyDxe.inf
+
+  #
+  # Default Security Key Enrollment Application.
+  #
+  SecurityPkg/EnrollFromDefaultKeysApp/EnrollFromDefaultKeysApp.inf
+
+  #
+  # Secure Boot Support
+  #
+  SecurityPkg/VariableAuthenticated/SecureBootConfigDxe/SecureBootConfigDxe.inf
+
+  #
+  # Secure Boot Provision
+  #
+  Silicon/NVIDIA/Drivers/NvSecureBootProvisionDxe/NvSecureBootProvisionDxe.inf
+!endif
+
+!ifdef CONFIG_SECURITY_UEFI_SECURE_BOOT_BMC_EVENT_REPORT
+  #
+  # Secure Boot Event Reporting.
+  #
+  Silicon/NVIDIA/Drivers/SecureBootBmcEvent/SecureBootBmcEvent.inf
 !endif
 
 !ifdef CONFIG_RCM_BOOT
@@ -2411,45 +2550,6 @@ CONFIG_FMP_CERTIFICATES_DTB_MAX_SIZE=0
   # RCM Support
   #
   Silicon/NVIDIA/Drivers/RcmDxe/RcmDxe.inf
-!endif
-
-  #
-  # Platform To Driver Configuration Support
-  #
-  Silicon/NVIDIA/Drivers/PlatformToDriverConfiguration/PlatformToDriverConfiguration.inf
-
-  #
-  # Regulator support
-  #
-  Silicon/NVIDIA/Drivers/RegulatorDxe/RegulatorDxe.inf
-
-  #
-  # Capsule Update Policy Protocol
-  #
-  Silicon/NVIDIA/Drivers/CapsuleUpdatePolicyDxe/CapsuleUpdatePolicyDxe.inf
-
-  #
-  # QSPI Support
-  #
-  Silicon/NVIDIA/Drivers/QspiControllerDxe/QspiControllerDxe.inf
-
-  #
-  # NOR Flash Support
-  #
-  Silicon/NVIDIA/Drivers/NorFlashDxe/NorFlashDxe.inf
-
-!ifdef CONFIG_VARIABLE_NON_SECURE_SUPPORTED
-!ifndef CONFIG_VARIABLE_EMULATED
-  #
-  # FVB Support
-  #
-  Silicon/NVIDIA/Drivers/FvbDxe/FvbDxe.inf
-  Silicon/NVIDIA/Drivers/FvbNorFlashDxe/FvbNorFlashDxe.inf
-  MdeModulePkg/Universal/FaultTolerantWriteDxe/FaultTolerantWriteDxe.inf {
-    <LibraryClasses>
-      NULL|EmbeddedPkg/Library/NvVarStoreFormattedLib/NvVarStoreFormattedLib.inf
-  }
-!endif
 !endif
 
   #
@@ -2461,20 +2561,9 @@ CONFIG_FMP_CERTIFICATES_DTB_MAX_SIZE=0
   }
 
   #
-  # Tegra Pin Control support
-  #
-  Silicon/NVIDIA/Drivers/TegraPinControlDxe/TegraPinControlDxe.inf
-
-  #
   # Boot Chain Protocol
   #
   Silicon/NVIDIA/Drivers/BootChainDxe/BootChainDxe.inf
-
-  #
-  # CPU Frequency support
-  #
-  Silicon/NVIDIA/Drivers/TegraCpuFreqDxe/TegraCpuFreqDxe.inf
-  Silicon/NVIDIA/Drivers/CpuFreqMonitor/CpuFreqMonitorDxe.inf
 
   #
   # Tegra Controller Enable Driver
@@ -2482,34 +2571,10 @@ CONFIG_FMP_CERTIFICATES_DTB_MAX_SIZE=0
   Silicon/NVIDIA/Drivers/TegraControllerEnableDxe/TegraControllerEnableDxe.inf
 
   #
-  # Uphy Configuration Driver
-  #
-  Silicon/NVIDIA/Drivers/UphyConfigurationDxe/UphyConfigurationDxe.inf
-
-  #
   # Fuse Support
   #
   Silicon/NVIDIA/Drivers/EFuseDxe/EFuseDxe.inf
 
-!ifdef CONFIG_SECURITY_UEFI_SECURE_BOOT
-  #
-  # Secure Boot Provision
-  #
-  Silicon/NVIDIA/Drivers/NvSecureBootProvisionDxe/NvSecureBootProvisionDxe.inf
-!endif
-
-  #
-  # Memory Tests
-  #
-!ifdef CONFIG_MEMORY_TEST
-  Silicon/NVIDIA/Drivers/GenericMpMemoryTestDxe/GenericMemoryTestDxe.inf
-!endif
-
-  #
-  # Multiprocessor support
-  #
-  ArmPkg/Drivers/ArmPsciMpServicesDxe/ArmPsciMpServicesDxe.inf
-  Silicon/NVIDIA/Drivers/ThreadingDxe/ThreadingDxe.inf
 
   #
   # L4T launcher
@@ -2525,6 +2590,11 @@ CONFIG_FMP_CERTIFICATES_DTB_MAX_SIZE=0
 !ifdef CONFIG_DEADLOOP_APP_SUPPORT
   Silicon/NVIDIA/Application/WfiApp/WfiApp.inf
 !endif
+
+
+  #
+  # Android
+  #
 
   # Boot support for mkbootimg partitions
 !ifdef CONFIG_BOOT_NATIVE_ANDROID_PARTITION_SUPPORT
@@ -2568,15 +2638,10 @@ CONFIG_FMP_CERTIFICATES_DTB_MAX_SIZE=0
   Silicon/NVIDIA/Drivers/AndroidFmpInitDxe/AndroidFmpInitDxe.inf
 !endif
 
-  #
-  # Gpio Power Off Driver
-  #
-  Silicon/NVIDIA/Drivers/GpioPowerOffDxe/GpioPowerOffDxe.inf
 
   #
-  # Gpio Boot Complete Driver
+  # Redfish
   #
-  Silicon/NVIDIA/Drivers/GpioBootCompleteDxe/GpioBootCompleteDxe.inf
 
 !ifdef CONFIG_REDFISH
 #
@@ -2754,23 +2819,6 @@ CONFIG_FMP_CERTIFICATES_DTB_MAX_SIZE=0
 !endif
 !endif
 
-!ifdef CONFIG_RAS_SMBIOS_MODULE
-  #
-  # RAS SMBIOS module
-  #
-  Silicon/NVIDIA/Server/TH500/Drivers/SmbiosRasTransfer/SmbiosRasTransfer.inf {
-    <LibraryClasses>
-      SecureFwCommLib|Silicon/NVIDIA/Server/TH500/Library/SecureFwCommLib/SecureFwCommLib.inf
-    }
-!endif
-
-  #
-  # SMMUv3 support
-  #
-!ifdef CONFIG_SMMU_V3
-  Silicon/NVIDIA/Drivers/SmmuV3Dxe/SmmuV3Dxe.inf
-  Silicon/NVIDIA/Drivers/SmmuDriverDxe/SmmuDriverDxe.inf
-!endif
 
 [Components.AARCH64]
   #
