@@ -752,6 +752,91 @@ AndroidBcbGetVerityCorrupted (
   return EFI_SUCCESS;
 }
 
+/**
+  Report whether the active boot slot has been marked successful by Android.
+
+  See AndroidBcbLib.h for full semantics. Mirrors AndroidBcbGetVerityCorrupted
+  but consumes BootCtrl.SlotInfo[active].SuccessfulBoot instead.
+**/
+EFI_STATUS
+EFIAPI
+AndroidBcbGetActiveSlotSuccessful (
+  IN  EFI_HANDLE  Handle,
+  OUT BOOLEAN     *Successful
+  )
+{
+  EFI_STATUS             Status;
+  EFI_BLOCK_IO_PROTOCOL  *MscBlockIo;
+  EFI_DISK_IO_PROTOCOL   *MscDiskIo;
+  BootloaderControl      BootCtrl;
+  UINT32                 MscActiveSlotIndex;
+  UINT32                 BootCtrlOffset;
+  UINT32                 ComputedCrc;
+
+  if (Successful == NULL) {
+    return EFI_INVALID_PARAMETER;
+  }
+
+  *Successful = FALSE;
+
+  Status = GetMiscIoProtocolFromHandle (Handle, &MscBlockIo, &MscDiskIo);
+  if (EFI_ERROR (Status)) {
+    DEBUG ((DEBUG_ERROR, "%a: Got %r trying to fetch IO protocols\r\n", __FUNCTION__, Status));
+    return Status;
+  }
+
+  BootCtrlOffset = NV_OFFSETOF (BootloaderMessageAb, BootCtrl);
+
+  Status = MscDiskIo->ReadDisk (
+                        MscDiskIo,
+                        MscBlockIo->Media->MediaId,
+                        BootCtrlOffset,
+                        sizeof (BootloaderControl),
+                        (VOID *)&BootCtrl
+                        );
+  if (EFI_ERROR (Status)) {
+    DEBUG ((DEBUG_ERROR, "%a: Got %r trying to read bootcontrol from Misc\r\n", __FUNCTION__, Status));
+    return Status;
+  }
+
+  ComputedCrc = BootloaderControlLeCrc (&BootCtrl);
+  if (ComputedCrc != BootCtrl.Crc32Le) {
+    // BCB not initialized yet (first boot after factory flash). Treat as
+    // "not successful" so the deferred-commit caller skips committing.
+    DEBUG ((DEBUG_INFO, "%a: BootCtrl Crc mismatch, considering first boot\r\n", __FUNCTION__));
+    return EFI_SUCCESS;
+  }
+
+  MscActiveSlotIndex = BcbGetActiveBootSlot (&BootCtrl);
+
+  // Guard: SuccessfulBoot is only meaningful when BCB priority slot
+  // (Android's view) matches the BR-BCT active chain (what the SoC
+  // actually booted). If they disagree, we don't know whose bit we're
+  // reading -- refuse to answer.
+  if (MscActiveSlotIndex != BcbGetActiveFwBootChain ()) {
+    DEBUG ((
+      DEBUG_ERROR,
+      "%a: BCB priority slot %u != FW boot chain %u\r\n",
+      __FUNCTION__,
+      MscActiveSlotIndex,
+      BcbGetActiveFwBootChain ()
+      ));
+    return EFI_NOT_READY;
+  }
+
+  *Successful = (BootCtrl.SlotInfo[MscActiveSlotIndex].SuccessfulBoot != 0);
+
+  DEBUG ((
+    DEBUG_INFO,
+    "%a: Slot %u SuccessfulBoot = %u\r\n",
+    __FUNCTION__,
+    MscActiveSlotIndex,
+    *Successful
+    ));
+
+  return EFI_SUCCESS;
+}
+
 BOOLEAN
 EFIAPI
 BcbIsInOta (

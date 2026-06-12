@@ -713,6 +713,189 @@ Exit:
 }
 
 /**
+  Commit (advance) rollback indexes after a confirmed-successful prior boot.
+
+  libavb's avb_slot_verify() deliberately does NOT bump the stored rollback
+  index; that responsibility is left to the bootloader so it can implement a
+  safe commit policy (see external/avb/libavb/avb_slot_verify.h and AOSP's
+  reference avb_ab_flow_do_io). NVIDIA's UEFI never performed this commit, so
+  the RPMB-backed counter stays at its factory value forever and the
+  anti-rollback property is not actually enforced across reboots.
+
+  Policy implemented here (deferred commit):
+
+    1. The new payload's vbmeta must have passed AVB verification, i.e.
+       SlotData is non-NULL and BootState == VERIFIED_BOOT_GREEN_STATE
+       (fully verified with the platform/embedded key, device locked).
+       YELLOW (user key) and ORANGE (unlocked) intentionally do not commit.
+
+    2. The active slot in BCB must already be marked SuccessfulBoot=1.
+       That bit is set by Android (bootctl markBootSuccessful /
+       IBootControl) only after the system is fully up. By gating on it we
+       only advance the stored rollback index on the boot AFTER the new
+       slot proved itself good, which is the standard A/B anti-brick rule:
+       if the new slot bricks before Android can mark it successful, the
+       stored rollback index has not advanced yet and any rollback path
+       (BCB retry exhaustion, FW chain switch) is still permitted.
+
+    3. Per location, only WriteRollbackIndex when payload value is strictly
+       greater than the currently stored value. Monotonic increase only;
+       never decrement, never re-write the same value (avoids unnecessary
+       RPMB writes / wear).
+
+  Failures here are logged but never propagated: AVB verify already
+  succeeded, so we must not turn a successful boot into a failure just
+  because the commit thunk to OP-TEE / RPMB had a transient error.
+
+  @param[in]  SlotData    AvbSlotVerifyData from the just-completed verify.
+                          Source of payload rollback_indexes[] values.
+  @param[in]  BootState   Resolved AVB boot state for this boot.
+
+  Return policy: only truly anomalous conditions surface as an error.
+  Policy-driven skips (not GREEN, prior boot not yet marked successful) and
+  best-effort per-location read/write failures already produce DEBUG logs, so
+  they all return EFI_SUCCESS to keep the caller's control flow simple. Real
+  I/O errors that prevent the policy decision itself from being made (e.g. the
+  MSC partition can't be read) are propagated, since we can't safely conclude
+  whether a commit is warranted.
+
+  @retval EFI_SUCCESS              Commit step finished. May mean all
+                                   locations were committed, partially
+                                   committed, or fully skipped per policy
+                                   (see DEBUG log for the detailed reason).
+  @retval EFI_INVALID_PARAMETER    SlotData is NULL (broken contract;
+                                   logged then returned).
+  @retval other EFI_STATUS         Underlying error from
+                                   AndroidBcbGetActiveSlotSuccessful() when
+                                   the MSC partition could not be read.
+**/
+STATIC
+EFI_STATUS
+AvbCommitRollbackIndexes (
+  IN AvbSlotVerifyData  *SlotData,
+  IN AVB_BOOT_STATE     BootState
+  )
+{
+  EFI_STATUS   Status;
+  AvbIOResult  AvbResult;
+  BOOLEAN      PriorBootSuccessful;
+  UINT32       Idx;
+  uint64_t     StoredIndex;
+  uint64_t     PayloadIndex;
+  UINT32       CommittedCount = 0;
+
+  if (SlotData == NULL) {
+    DEBUG ((DEBUG_ERROR, "%a: SlotData is NULL\n", __FUNCTION__));
+    return EFI_INVALID_PARAMETER;
+  }
+
+  // Gate 1: only commit on a fully-trusted GREEN boot. YELLOW/ORANGE/RED
+  // deliberately do not advance the stored counter.
+  if (BootState != VERIFIED_BOOT_GREEN_STATE) {
+    DEBUG ((
+      DEBUG_INFO,
+      "%a: BootState=%d != GREEN, skipping rollback-index commit\n",
+      __FUNCTION__,
+      BootState
+      ));
+    return EFI_SUCCESS;
+  }
+
+  // Gate 2: only commit if the PRIOR boot was marked successful by Android.
+  // This is the "deferred commit" the user asked for: we never advance the
+  // stored index on the very first boot of a new slot; we wait until Android
+  // has had a chance to call markBootSuccessful, then commit on the next
+  // boot (which will re-verify the same slot and read SuccessfulBoot=1).
+  PriorBootSuccessful = FALSE;
+  Status              = AndroidBcbGetActiveSlotSuccessful (NULL, &PriorBootSuccessful);
+  if (EFI_ERROR (Status)) {
+    // Real I/O failure reading the MSC partition (the BCB-uninitialized /
+    // CRC-mismatch case is absorbed by AndroidBcbGetActiveSlotSuccessful as
+    // SUCCESS with Successful=FALSE, so anything that reaches this branch is
+    // an unexpected hardware/protocol error and must be reported.
+    DEBUG ((
+      DEBUG_ERROR,
+      "%a: AndroidBcbGetActiveSlotSuccessful returned %r, skipping commit\n",
+      __FUNCTION__,
+      Status
+      ));
+    return Status;
+  }
+
+  if (!PriorBootSuccessful) {
+    DEBUG ((
+      DEBUG_INFO,
+      "%a: Active slot not yet marked successful by Android, "
+      "deferring rollback-index commit to next boot\n",
+      __FUNCTION__
+      ));
+    return EFI_SUCCESS;
+  }
+
+  // Gate 3 (per location): only bump where payload > stored.
+  for (Idx = 0; Idx < AVB_MAX_NUMBER_OF_ROLLBACK_INDEX_LOCATIONS; Idx++) {
+    PayloadIndex = SlotData->rollback_indexes[Idx];
+    if (PayloadIndex == 0) {
+      // libavb leaves locations unused by this vbmeta tree at 0. Nothing
+      // to commit; skip without an RPMB read.
+      continue;
+    }
+
+    StoredIndex = 0;
+    AvbResult   = ReadRollbackIndex (NULL, (size_t)Idx, &StoredIndex);
+    if (AvbResult != AVB_IO_RESULT_OK) {
+      DEBUG ((
+        DEBUG_ERROR,
+        "%a: ReadRollbackIndex(loc=%u) failed (%d), skipping this location\n",
+        __FUNCTION__,
+        Idx,
+        AvbResult
+        ));
+      continue;
+    }
+
+    if (PayloadIndex <= StoredIndex) {
+      // Same value (no-op) or stored is already higher (should never
+      // happen for a GREEN verify, but be defensive and never decrement).
+      continue;
+    }
+
+    AvbResult = WriteRollbackIndex (NULL, (size_t)Idx, PayloadIndex);
+    if (AvbResult != AVB_IO_RESULT_OK) {
+      DEBUG ((
+        DEBUG_ERROR,
+        "%a: WriteRollbackIndex(loc=%u, %lu->%lu) failed (%d)\n",
+        __FUNCTION__,
+        Idx,
+        StoredIndex,
+        PayloadIndex,
+        AvbResult
+        ));
+      continue;
+    }
+
+    DEBUG ((
+      DEBUG_ERROR,
+      "%a: Committed rollback index loc=%u: %lu -> %lu\n",
+      __FUNCTION__,
+      Idx,
+      StoredIndex,
+      PayloadIndex
+      ));
+    CommittedCount++;
+  }
+
+  DEBUG ((
+    DEBUG_INFO,
+    "%a: rollback-index commit done, %u location(s) advanced\n",
+    __FUNCTION__,
+    CommittedCount
+    ));
+
+  return EFI_SUCCESS;
+}
+
+/**
   Validate if vbmeta partition key is trusted key.
 
   @param[in]  Ops                       A pointer to the AvbOps struct.
@@ -1298,6 +1481,24 @@ AvbVerifyBoot (
   }
 
   mAvbBootState = BootState;
+
+  // Deferred rollback-index commit: bump RPMB-stored rollback indexes only
+  // after AVB verify passed AND the prior boot of this slot was marked
+  // successful by Android (BCB SuccessfulBoot=1). See AvbCommitRollbackIndexes
+  // for the full policy. The function self-logs every meaningful outcome and
+  // only returns an error for true contract violations (e.g. NULL SlotData);
+  // we log such errors here and continue, since a verified boot must not be
+  // turned into a failure by the commit step. Status is intentionally
+  // reassigned below by GetBootConfigUpdateProtocol().
+  Status = AvbCommitRollbackIndexes (SlotData, BootState);
+  if (EFI_ERROR (Status)) {
+    DEBUG ((
+      DEBUG_ERROR,
+      "%a: rollback-index commit returned %r (ignored)\n",
+      __FUNCTION__,
+      Status
+      ));
+  }
 
   BootStateStr = (BootState == VERIFIED_BOOT_RED_STATE) ? "red" :
                  (BootState == VERIFIED_BOOT_RED_STATE_EIO) ? "red_eio" :

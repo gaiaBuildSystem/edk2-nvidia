@@ -266,4 +266,41 @@ AndroidBcbGetVerityCorrupted (
   OUT BOOLEAN     *VerityCorrupted
   );
 
+/**
+  Report whether the active boot slot has been marked successful by Android.
+
+  Reads the BootloaderControl block from the MISC partition and returns the
+  SuccessfulBoot bit of the highest-priority slot (Android's notion of the
+  active slot, which may differ from the chain UEFI is currently running on).
+  This bit is set to 1 by Android (via bootctl / IBootControl::markBootSuccessful)
+  after a slot finishes booting successfully, and stays 0 for fresh OTA slots
+  that have not yet been confirmed.
+
+  Used by AVB rollback-index commit to gate the bump until the prior boot was
+  confirmed successful (deferred commit), avoiding bricks if a bad slot has
+  already advanced the stored rollback index past slots that may need to roll
+  back.
+
+  @param[in]   Handle              Image Handle to access block device. Pass
+                                   NULL to auto-locate the MSC partition.
+  @param[out]  Successful          Pointer to receive SuccessfulBoot status of
+                                   the active slot. Set to FALSE when the BCB
+                                   has not been initialized yet (first boot
+                                   after factory flash).
+
+  @retval EFI_SUCCESS              Operation successful (or BCB uninitialized,
+                                   in which case Successful is FALSE).
+  @retval EFI_INVALID_PARAMETER    Successful is NULL.
+  @retval EFI_NOT_READY            BCB highest-priority slot does not match
+                                   the BR-BCT active chain; the SuccessfulBoot
+                                   bit is not attributable to the running slot.
+  @retval others                   Error occurred reading the MSC partition.
+**/
+EFI_STATUS
+EFIAPI
+AndroidBcbGetActiveSlotSuccessful (
+  IN  EFI_HANDLE  Handle,
+  OUT BOOLEAN     *Successful
+  );
+
 #endif /* __BOOTLOADER_MESSAGE_H_ */
