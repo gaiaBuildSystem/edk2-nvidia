@@ -564,6 +564,8 @@
 #
   gNVIDIATokenSpaceGuid.PcdFdtBoot|0x1|UINT32|0x00000177
 
+  gNVIDIATokenSpaceGuid.PcdBootConfigEnableSecurityModeFuse|FALSE|BOOLEAN|0x000000B7
+
 [PcdsFeatureFlag]
 #OPTEE presence
   gNVIDIATokenSpaceGuid.PcdOpteePresent|FALSE|BOOLEAN|0x00000067

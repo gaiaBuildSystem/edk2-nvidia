@@ -16,8 +16,10 @@
 #include <Library/BootChainInfoLib.h>
 #include <Library/AndroidBcbLib.h>
 #include <Library/BootConfigProtocolLib.h>
+#include <Library/TegraPlatformInfoLib.h>
 #include <Protocol/BootConfigUpdateProtocol.h>
 #include <Protocol/Eeprom.h>
+#include <Protocol/EFuse.h>
 
 #define BOOTCONFIG_DUMMY_SERIALNO    "DummySN"
 #define BOOTCONFIG_DEFAULT_SERIALNO  "0123456789ABCDEF"
@@ -25,6 +27,12 @@
 
 #define MAX_SLOT_SUFFIX_LEN          3
 #define MAX_BOOT_CHAIN_INFO_MAPPING  2
+
+#define T23X_FUSE_SECURITY_MODE_OFFSET                 0x1a0
+#define T23X_FUSE_SECURITY_MODE_BIT                    BIT0
+#define T23X_FUSE_BOOT_SECURITY_INFO_OFFSET            0x268
+#define T23X_FUSE_BOOT_SECURITY_INFO_AUTH_SCHEME_MASK  0x7
+
 CHAR8  *SlotSuffixNameId[MAX_BOOT_CHAIN_INFO_MAPPING] = {
   "_a",
   "_b",
@@ -383,6 +391,112 @@ BootConfigAddDtboIdx (
   return Status;
 }
 
+#if FixedPcdGetBool (PcdBootConfigEnableSecurityModeFuse)
+
+STATIC
+EFI_STATUS
+EFIAPI
+BootConfigGetSecurityModeT23x (
+  OUT CONST CHAR8  **SecurityValue
+  )
+{
+  EFI_STATUS             Status;
+  NVIDIA_EFUSE_PROTOCOL  *EFuse;
+  UINT32                 BootSecurityInfo;
+  UINT32                 SecurityMode;
+  BOOLEAN                AuthSchemeFused;
+  BOOLEAN                SecurityModeFused;
+
+  *SecurityValue = NULL;
+
+  Status = gBS->LocateProtocol (&gNVIDIAEFuseProtocolGuid, NULL, (VOID **)&EFuse);
+  if (EFI_ERROR (Status)) {
+    DEBUG ((
+      DEBUG_WARN,
+      "%a: EFuse protocol unavailable (%r); skipping androidboot.security\n",
+      __FUNCTION__,
+      Status
+      ));
+    return EFI_SUCCESS;
+  }
+
+  Status = EFuse->ReadReg (EFuse, T23X_FUSE_BOOT_SECURITY_INFO_OFFSET, &BootSecurityInfo);
+  if (EFI_ERROR (Status)) {
+    DEBUG ((DEBUG_ERROR, "%a: Failed to read FUSE_BOOT_SECURITY_INFO_0 (%r)\n", __FUNCTION__, Status));
+    return Status;
+  }
+
+  Status = EFuse->ReadReg (EFuse, T23X_FUSE_SECURITY_MODE_OFFSET, &SecurityMode);
+  if (EFI_ERROR (Status)) {
+    DEBUG ((DEBUG_ERROR, "%a: Failed to read FUSE_SECURITY_MODE_0 (%r)\n", __FUNCTION__, Status));
+    return Status;
+  }
+
+  AuthSchemeFused   = (BOOLEAN)((BootSecurityInfo & T23X_FUSE_BOOT_SECURITY_INFO_AUTH_SCHEME_MASK) != 0);
+  SecurityModeFused = (BOOLEAN)((SecurityMode & T23X_FUSE_SECURITY_MODE_BIT) != 0);
+
+  *SecurityValue = (AuthSchemeFused && SecurityModeFused) ? "1" : "0";
+
+  DEBUG ((
+    DEBUG_INFO,
+    "%a: BOOT_SECURITY_INFO=0x%08x SECURITY_MODE=0x%08x -> androidboot.security=%a\n",
+    __FUNCTION__,
+    BootSecurityInfo,
+    SecurityMode,
+    *SecurityValue
+    ));
+
+  return EFI_SUCCESS;
+}
+
+#endif // FixedPcdGetBool (PcdBootConfigEnableSecurityModeFuse)
+
+STATIC
+EFI_STATUS
+EFIAPI
+BootConfigAddSecurityMode (
+  VOID
+  )
+{
+ #if FixedPcdGetBool (PcdBootConfigEnableSecurityModeFuse)
+  EFI_STATUS                         Status;
+  NVIDIA_BOOTCONFIG_UPDATE_PROTOCOL  *BootConfigProtocol;
+  CONST CHAR8                        *SecurityValue;
+
+  SecurityValue = NULL;
+  switch (TegraGetChipID ()) {
+    case T234_CHIP_ID:
+      Status = BootConfigGetSecurityModeT23x (&SecurityValue);
+      if (EFI_ERROR (Status)) {
+        return Status;
+      }
+
+      break;
+    default:
+      return EFI_SUCCESS;
+  }
+
+  if (SecurityValue == NULL) {
+    return EFI_SUCCESS;
+  }
+
+  Status = GetBootConfigUpdateProtocol (&BootConfigProtocol);
+  if (EFI_ERROR (Status)) {
+    DEBUG ((DEBUG_ERROR, "%a: Got %r trying to get bootconfig update protocol\n", __FUNCTION__, Status));
+    return Status;
+  }
+
+  Status = BootConfigProtocol->UpdateBootConfigs (BootConfigProtocol, "security", SecurityValue);
+  if (EFI_ERROR (Status)) {
+    DEBUG ((DEBUG_ERROR, "%a: Got %r trying to add androidboot.security to bootconfig\n", __FUNCTION__, Status));
+  }
+
+  return Status;
+ #else
+  return EFI_SUCCESS;
+ #endif
+}
+
 /**
  * Adds boot time boot configuration.
  *
@@ -413,6 +527,11 @@ BootConfigPrepareBootTimeArgs (
   }
 
   Status = BootConfigAddDtboIdx ();
+  if (EFI_ERROR (Status)) {
+    return Status;
+  }
+
+  Status = BootConfigAddSecurityMode ();
   if (EFI_ERROR (Status)) {
     return Status;
   }

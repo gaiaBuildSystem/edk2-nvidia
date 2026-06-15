@@ -972,6 +972,12 @@ CONFIG_FMP_CERTIFICATES_DTB_MAX_SIZE=0
 !endif
 !endif
 
+!ifdef CONFIG_BUILD_ANDROID
+!ifdef CONFIG_SOC_T23X
+  gNVIDIATokenSpaceGuid.PcdBootConfigEnableSecurityModeFuse|TRUE
+!endif
+!endif
+
   #
   # Variable Services PCDs.
   #

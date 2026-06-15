@@ -1,5 +1,5 @@
 #
-#  SPDX-FileCopyrightText:  Copyright (c) 2024-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+#  SPDX-FileCopyrightText:  Copyright (c) 2024-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 #
 #  SPDX-License-Identifier: BSD-2-Clause-Patent
 #
@@ -23,14 +23,25 @@
   NctLib
   BootChainInfoLib
   AndroidBcbLib
+#
+# TegraPlatformInfoLib is only referenced under
+# PcdBootConfigEnableSecurityModeFuse == TRUE. Platforms that do not
+# enable that PCD (e.g. TegraVirt) do not resolve this library class,
+# so the reference is compile-time-gated in the .c file instead of
+# being listed here unconditionally.
+#
 
 [Sources.common]
   BootConfigProtocolLib.c
 
 [Pcd]
 
+[FixedPcd]
+  gNVIDIATokenSpaceGuid.PcdBootConfigEnableSecurityModeFuse
+
 [Guids]
 
 [Protocols]
   gNVIDIABootConfigUpdateProtocol             ## SOMETIMES_PRODUCES
   gNVIDIACvmEepromProtocolGuid                ## SOMETIMES_CONSUMES
+  gNVIDIAEFuseProtocolGuid                    ## SOMETIMES_CONSUMES
