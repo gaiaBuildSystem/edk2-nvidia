@@ -566,6 +566,14 @@
 
   gNVIDIATokenSpaceGuid.PcdBootConfigEnableSecurityModeFuse|FALSE|BOOLEAN|0x000000B7
 
+# Enable the NCT-integrity SHA-256 seed/verify path in AvbLib (Android / Tegra).
+# When TRUE, AvbVerifyBoot hashes the NCT partition and, on first boot only
+# (when no nvidia.nct.sha256 persistent value exists in the AVB TA / RPMB),
+# writes that digest via TA_AVB_CMD_WRITE_PERSIST_VALUE. On subsequent boots
+# it reads the stored digest and logs a match / mismatch result.
+# When FALSE, AvbSeedNctIntegrityHash and its call site are not compiled in.
+  gNVIDIATokenSpaceGuid.PcdAvbEnableNctIntegrityHash|FALSE|BOOLEAN|0x000000B8
+
 [PcdsFeatureFlag]
 #OPTEE presence
   gNVIDIATokenSpaceGuid.PcdOpteePresent|FALSE|BOOLEAN|0x00000067

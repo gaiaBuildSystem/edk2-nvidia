@@ -21,6 +21,7 @@
 #include <Library/FdtLib.h>
 #include <Library/DeviceTreeHelperLib.h>
 #include <Library/PlatformResourceLib.h>
+#include <Library/BaseCryptLib.h>
 
 #include <Protocol/PartitionInfo.h>
 #include <Protocol/BlockIo.h>
@@ -34,6 +35,7 @@
 STATIC BOOLEAN        IsNctInitialized = FALSE;
 STATIC NCT_PART_HEAD  *NctHead;
 STATIC VOID           *NctPtr = NULL;
+STATIC UINTN          NctSize = 0;
 
 /**
  * Get readable spec id/config from NCT
@@ -122,7 +124,6 @@ NctInit (
   EFI_HANDLE                   *HandleBuffer = NULL;
   EFI_BLOCK_IO_PROTOCOL        *BlockIo;
   EFI_DISK_IO_PROTOCOL         *DiskIo;
-  UINTN                        NctSize;
 
   DEBUG ((DEBUG_INFO, "%a: Enter NCT init\n", __FUNCTION__));
   if (IsNctInitialized == TRUE) {
@@ -264,9 +265,77 @@ NctInit (
 Exit:
   if (EFI_ERROR (Status) && (NctPtr != NULL)) {
     FreePool (NctPtr);
+    NctPtr  = NULL;
+    NctSize = 0;
   }
 
   return Status;
+}
+
+/**
+ * Compute a SHA-256 digest over the in-memory raw NCT partition data.
+ *
+ * Hashes the entire NCT partition (header + tnspec region + entries +
+ * any trailing/unused bytes that were read from flash), so the digest
+ * is sensitive to any modification of the partition's binary image.
+ *
+ * Lazily initializes NCT (loads the partition into memory) on first
+ * call. The internal NCT cache is never exposed to the caller.
+ *
+ * @param[out] Hash  Caller-provided buffer of SHA256_DIGEST_SIZE bytes
+ *                   that receives the digest.
+ *
+ * @retval EFI_SUCCESS            SHA-256 computed.
+ * @retval EFI_INVALID_PARAMETER  Hash is NULL.
+ * @retval EFI_NOT_READY          NCT is loaded but the cache is empty.
+ * @retval EFI_DEVICE_ERROR       Sha256HashAll failed.
+ * @retval Other                  NctInit failed; the NCT partition could
+ *                                not be located/loaded.
+ */
+EFI_STATUS
+EFIAPI
+NctGetSha256Hash (
+  OUT UINT8  *Hash
+  )
+{
+  EFI_STATUS  Status;
+  BOOLEAN     HashOk;
+
+  if (Hash == NULL) {
+    return EFI_INVALID_PARAMETER;
+  }
+
+  if (IsNctInitialized == FALSE) {
+    Status = NctInit (NULL);
+    if (EFI_ERROR (Status)) {
+      DEBUG ((DEBUG_ERROR, "%a: Got %r trying to initialize NCT\n", __FUNCTION__, Status));
+      return Status;
+    }
+  }
+
+  if ((NctPtr == NULL) || (NctSize == 0)) {
+    return EFI_NOT_READY;
+  }
+
+  HashOk = Sha256HashAll (NctPtr, NctSize, Hash);
+  if (!HashOk) {
+    DEBUG ((
+      DEBUG_ERROR,
+      "%a: Sha256HashAll failed on NCT (%lu bytes)\n",
+      __FUNCTION__,
+      (UINT64)NctSize
+      ));
+    return EFI_DEVICE_ERROR;
+  }
+
+  DEBUG ((
+    DEBUG_INFO,
+    "%a: SHA-256 over NCT computed (NCT=%lu bytes)\n",
+    __FUNCTION__,
+    (UINT64)NctSize
+    ));
+
+  return EFI_SUCCESS;
 }
 
 /**

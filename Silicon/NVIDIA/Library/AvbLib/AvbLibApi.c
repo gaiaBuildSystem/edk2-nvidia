@@ -26,6 +26,7 @@
 #include <Library/AndroidBcbLib.h>
 #include <Library/FdtLib.h>
 #include <Library/IoLib.h>
+#include <Library/NctLib.h>
 
 #include <Protocol/PartitionInfo.h>
 #include <Protocol/BlockIo.h>
@@ -54,6 +55,18 @@
 //           AVB TA lock state to match the register.
 //   FALSE = disable: AvbVerifyBoot ignores the scratch register entirely
 //           and AvbApplyFactoryUnlockReset / its helpers are not compiled.
+//
+// Build-time switch for the NCT integrity SHA-256 seed/verify path.
+// Driven by gNVIDIATokenSpaceGuid.PcdAvbEnableNctIntegrityHash (default
+// FALSE in NVIDIA.dec, overridden to TRUE in NVIDIA.common.dsc.inc under
+// CONFIG_BUILD_ANDROID && CONFIG_SOC_T23X).
+//   TRUE  = enable: on first boot the SHA-256 of NCT is written to
+//           RPMB; on later boots it is compared against the stored
+//           digest and any mismatch unconditionally forces BootState
+//           to RED (NCT integrity is enforced regardless of lock
+//           state / pre-existing AVB result).
+//   FALSE = disable: AvbSeedNctIntegrityHash and its call site are
+//           not compiled.
 //
 #if FixedPcdGetBool (PcdAvbEnableFactoryUnlockReset)
 //
@@ -1047,6 +1060,114 @@ Exit:
   return AvbResult;
 }
 
+#if FixedPcdGetBool (PcdAvbEnableNctIntegrityHash)
+
+/**
+  Seed or verify the NCT SHA-256 in RPMB under NCT_INTEGRITY_HASH_NAME.
+
+  Pure "hash NCT + persist/compare in RPMB" helper; boot-state policy
+  on mismatch (e.g. demoting to RED) is the caller's job. The stored
+  seed is factory ground truth: written once on first boot, never
+  overwritten on mismatch. Best-effort I/O failures (RPMB transient
+  error, hash compute error) are non-fatal and never escalated -- an
+  inconclusive read must not be turned into a tamper signal.
+
+  @retval EFI_SUCCESS              Match, first-time seed, or
+                                   best-effort I/O failure (see log).
+  @retval EFI_SECURITY_VIOLATION   Stored hash differs from the
+                                   freshly computed one -- confirmed
+                                   NCT tampering.
+  @retval Others                   NCT could not be loaded or hashed;
+                                   nothing written.
+**/
+STATIC
+EFI_STATUS
+AvbSeedNctIntegrityHash (
+  VOID
+  )
+{
+  EFI_STATUS   Status;
+  AvbIOResult  AvbResult;
+  UINT8        ComputedHash[SHA256_DIGEST_SIZE];
+  UINT8        StoredHash[SHA256_DIGEST_SIZE];
+  size_t       StoredBytes = 0;
+
+  Status = NctGetSha256Hash (ComputedHash);
+  if (EFI_ERROR (Status)) {
+    DEBUG ((
+      DEBUG_ERROR,
+      "%a: Got %r computing NCT SHA-256, skipping integrity seed\n",
+      __FUNCTION__,
+      Status
+      ));
+    return Status;
+  }
+
+  AvbResult = ReadPersistentValue (
+                NULL,
+                NCT_INTEGRITY_HASH_NAME,
+                sizeof (StoredHash),
+                StoredHash,
+                &StoredBytes
+                );
+
+  if (AvbResult == AVB_IO_RESULT_OK) {
+    if ((StoredBytes == SHA256_DIGEST_SIZE) &&
+        (CompareMem (StoredHash, ComputedHash, SHA256_DIGEST_SIZE) == 0))
+    {
+      DEBUG ((DEBUG_INFO, "%a: NCT integrity hash matches RPMB seed\n", __FUNCTION__));
+      return EFI_SUCCESS;
+    }
+
+    // Confirmed tamper evidence; caller decides policy.
+    DEBUG ((
+      DEBUG_ERROR,
+      "%a: NCT integrity MISMATCH (stored=%lu bytes, expected=%u bytes)\n",
+      __FUNCTION__,
+      (UINT64)StoredBytes,
+      SHA256_DIGEST_SIZE
+      ));
+
+    return EFI_SECURITY_VIOLATION;
+  }
+
+  if (AvbResult != AVB_IO_RESULT_ERROR_NO_SUCH_VALUE) {
+    DEBUG ((
+      DEBUG_ERROR,
+      "%a: ReadPersistentValue(%a) returned %d, skipping integrity seed\n",
+      __FUNCTION__,
+      NCT_INTEGRITY_HASH_NAME,
+      AvbResult
+      ));
+    return EFI_SUCCESS;
+  }
+
+  // First boot: no seed in RPMB yet. Persist the freshly-computed hash so
+  // subsequent boots have a baseline to compare against.
+  AvbResult = WritePersistentValue (
+                NULL,
+                NCT_INTEGRITY_HASH_NAME,
+                SHA256_DIGEST_SIZE,
+                ComputedHash
+                );
+  if (AvbResult != AVB_IO_RESULT_OK) {
+    DEBUG ((
+      DEBUG_ERROR,
+      "%a: WritePersistentValue(%a) failed (%d); will retry next boot\n",
+      __FUNCTION__,
+      NCT_INTEGRITY_HASH_NAME,
+      AvbResult
+      ));
+    return EFI_SUCCESS;
+  }
+
+  DEBUG ((DEBUG_ERROR, "%a: Seeded NCT integrity hash to RPMB\n", __FUNCTION__));
+
+  return EFI_SUCCESS;
+}
+
+#endif // FixedPcdGetBool (PcdAvbEnableNctIntegrityHash)
+
 /**
   Verify avb_slot_verify and get boot state based on result.
 
@@ -1474,6 +1595,33 @@ AvbVerifyBoot (
     *AvbCmdline = SlotData->cmdline;
   }
 
+ #if FixedPcdGetBool (PcdAvbEnableNctIntegrityHash)
+  // Must run before AvbPassOpteeBootInfo / mAvbBootState /
+  // AvbCommitRollbackIndexes / verifiedbootstate / AvbShowUi so a
+  // RED demotion propagates to all of them. NCT integrity is
+  // enforced regardless of lock state and regardless of the current
+  // AVB result (ORANGE and RED_EIO get flattened to RED on mismatch);
+  // any other error is best-effort and never escalated.
+  Status = AvbSeedNctIntegrityHash ();
+  if (Status == EFI_SECURITY_VIOLATION) {
+    DEBUG ((
+      DEBUG_ERROR,
+      "%a: NCT mismatch; forcing boot state %d -> RED\n",
+      __FUNCTION__,
+      BootState
+      ));
+    BootState = VERIFIED_BOOT_RED_STATE;
+  } else if (EFI_ERROR (Status)) {
+    DEBUG ((
+      DEBUG_ERROR,
+      "%a: NCT integrity seed/verify returned %r (ignored)\n",
+      __FUNCTION__,
+      Status
+      ));
+  }
+
+ #endif
+
   Status = AvbPassOpteeBootInfo (NULL, SlotData, BootState);
   if (EFI_ERROR (Status)) {
     DEBUG ((DEBUG_ERROR, "%a: %r to set ROT bootinfo to Optee\n", __FUNCTION__, Status));
@@ -1520,6 +1668,23 @@ AvbVerifyBoot (
   }
 
   AvbShowUi (BootState);
+
+  // RED / RED_EIO must not hand off to the payload we just marked as
+  // failed. Report the failure up to the LoadFile caller (boot
+  // manager) via EFI_SECURITY_VIOLATION; A/B fallback is already
+  // primed because AndroidBcbCheckAndUpdateRetryCount decremented
+  // TriesRemaining before we ran.
+  if ((BootState == VERIFIED_BOOT_RED_STATE) ||
+      (BootState == VERIFIED_BOOT_RED_STATE_EIO))
+  {
+    DEBUG ((
+      DEBUG_ERROR,
+      "%a: RED boot state (%d) - refusing to load kernel\n",
+      __FUNCTION__,
+      BootState
+      ));
+    Status = EFI_SECURITY_VIOLATION;
+  }
 
 Exit:
   return Status;

@@ -328,4 +328,30 @@ NctPopulateMacAddrs (
   IN OUT VOID  *Dtb
   );
 
+/**
+ * Compute a SHA-256 digest over the in-memory raw NCT partition data.
+ *
+ * Hashes the entire NCT partition image so the digest is sensitive to any
+ * modification of the partition's binary contents. Lazily initializes NCT
+ * (loads the NCT partition into memory) on first call. NctLib's internal
+ * cache is never exposed to the caller.
+ *
+ * Intended for consumers that need an integrity reference for the NCT
+ * partition (e.g. RPMB-backed first-boot integrity seeding).
+ *
+ * @param[out] Hash  Caller-provided buffer of at least SHA256_DIGEST_SIZE
+ *                   bytes that receives the digest.
+ *
+ * @retval EFI_SUCCESS            SHA-256 computed.
+ * @retval EFI_INVALID_PARAMETER  Hash is NULL.
+ * @retval EFI_NOT_READY          NCT is loaded but the cache is empty.
+ * @retval EFI_DEVICE_ERROR       SHA-256 computation failed.
+ * @retval Other                  NctInit failed.
+ */
+EFI_STATUS
+EFIAPI
+NctGetSha256Hash (
+  OUT UINT8  *Hash
+  );
+
 #endif /* _NCT_LIB_H_ */

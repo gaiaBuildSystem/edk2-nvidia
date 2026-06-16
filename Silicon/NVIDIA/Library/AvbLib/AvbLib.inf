@@ -76,6 +76,7 @@
   PerformanceLib
   AndroidBcbLib
   IoLib
+  NctLib
 
 [Guids]
   gFdtTableGuid
@@ -89,6 +90,7 @@
 
 [FixedPcd]
   gNVIDIATokenSpaceGuid.PcdAvbEnableFactoryUnlockReset
+  gNVIDIATokenSpaceGuid.PcdAvbEnableNctIntegrityHash
 
 [BuildOptions]
   GCC:*_*_*_CC_FLAGS = -DAVB_COMPILATION -DAVB_ENABLE_DEBUG

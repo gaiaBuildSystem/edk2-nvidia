@@ -32,6 +32,15 @@ typedef enum {
 #define ROT_VERIFIEDBOOT_STATE_NAME  "avb.managed_verity_mode.verified_boot_state"
 #define ROT_BOOT_PATCHLEVEL_NAME     "avb.managed_verity_mode.boot_patchlevel"
 
+//
+// Name of the NCT integrity persistent value stored via TA_AVB_CMD_WRITE_PERSIST_VALUE.
+// Holds a SHA-256 digest of the full NCT partition contents. Seeded once on
+// the first boot of a freshly provisioned device (when the value is absent
+// from RPMB) and used as a reference for integrity checks on subsequent
+// boots.
+//
+#define NCT_INTEGRITY_HASH_NAME  "nvidia.nct.sha256"
+
 #define PROP_BOOT_PATCHLEVEL_NAME  "com.android.build.boot.security_patch"
 
 /*

@@ -979,6 +979,18 @@ CONFIG_FMP_CERTIFICATES_DTB_MAX_SIZE=0
 !endif
 
   #
+  # Enable AvbLib NCT-integrity SHA-256 seed (T23X Android only).
+  # The seed path requires NCT (NVIDIA-specific) and the AVB TA / RPMB, both
+  # of which are only present on Android Tegra targets. Default in NVIDIA.dec
+  # is FALSE so all other configs no-op and do not pay the SHA-256 cost.
+  #
+!ifdef CONFIG_BUILD_ANDROID
+!ifdef CONFIG_SOC_T23X
+  gNVIDIATokenSpaceGuid.PcdAvbEnableNctIntegrityHash|TRUE
+!endif
+!endif
+
+  #
   # Variable Services PCDs.
   #
   gEfiMdeModulePkgTokenSpaceGuid.PcdMaxVariableSize|0x2000
