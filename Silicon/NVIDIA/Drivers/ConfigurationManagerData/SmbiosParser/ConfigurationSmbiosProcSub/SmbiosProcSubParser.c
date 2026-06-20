@@ -509,6 +509,20 @@ InstallSmbiosType4Cm (
       ProcessorInfo[SocketLinearIndex].MaxSpeed = ProcessorData.MaxSpeed;
     }
 
+    // Secondary sockets mirror socket 0's speed values when socket 0 has valid
+    // (non-zero) data.  This avoids propagating a zero from a failed variable
+    // lookup on socket 0 to sockets that may have obtained a valid speed
+    // independently.
+    if (SocketLinearIndex > 0) {
+      if (ProcessorInfo[0].CurrentSpeed != 0) {
+        ProcessorInfo[SocketLinearIndex].CurrentSpeed = ProcessorInfo[0].CurrentSpeed;
+      }
+
+      if (ProcessorInfo[0].MaxSpeed != 0) {
+        ProcessorInfo[SocketLinearIndex].MaxSpeed = ProcessorInfo[0].MaxSpeed;
+      }
+    }
+
     Status = MpCoreInfoGetSocketInfo (SocketId, &EnabledCoreCount, NULL, NULL, &ThreadsPerCore, NULL);
     if (EFI_ERROR (Status)) {
       goto ExitInstallSmbiosType4;
