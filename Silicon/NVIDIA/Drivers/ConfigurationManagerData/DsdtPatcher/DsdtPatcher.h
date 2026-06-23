@@ -23,6 +23,7 @@
 #define ACPI_MRQ0_RX       "_SB_.MRQ0.RX"
 #define ACPI_I2CB_STA      "_SB_.I2CB._STA"
 #define ACPI_EEP1_STA      "_SB_.I2C2.EEP1._STA"
+#define ACPI_DPL1_STA      "_SB_.I2C2.DPL1._STA"
 #define ACPI_EEP2_STA      "_SB_.I2CB.EEP2._STA"
 #define UEFI_FDT_NODE_STR  "/firmware/uefi"
 #define PWR_BTN_FDT_STR    "acpi-power-button-policy"
@@ -40,6 +41,7 @@
     "_SB_.MRQ0.RX"
     "_SB_.I2CB._STA"
     "_SB_.I2C2.EEP1._STA"
+    "_SB_.I2C2.DPL1._STA"
     "_SB_.I2CB.EEP2._STA"
 
   A parser parses a Device Tree to populate a specific CmObj type. None,

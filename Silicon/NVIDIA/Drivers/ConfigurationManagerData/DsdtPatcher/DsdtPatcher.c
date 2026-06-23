@@ -547,6 +547,7 @@ UpdateDpllInfo (
   INT32                 SubNodeOffset;
   NVIDIA_AML_NODE_INFO  AcpiNodeInfo;
   UINT8                 I2CStatus;
+  UINT8                 DpllStatus;
   CONST CHAR8           *StatusString;
   UINT32                PropLen;
 
@@ -608,6 +609,26 @@ UpdateDpllInfo (
               DEBUG ((DEBUG_ERROR, "%a: Error updating %a - %r\r\n", __FUNCTION__, ACPI_I2C2_STA, Status));
               goto ErrorExit;
             }
+
+            // Update DPLL Status
+            Status = PatchProtocol->FindNode (PatchProtocol, ACPI_DPL1_STA, &AcpiNodeInfo);
+            if (EFI_ERROR (Status)) {
+              DEBUG ((DEBUG_ERROR, "%a: Find %a failed: %r\r\n", __FUNCTION__, ACPI_DPL1_STA, Status));
+              goto ErrorExit;
+            }
+
+            if (AcpiNodeInfo.Size != sizeof (DpllStatus)) {
+              Status = EFI_DEVICE_ERROR;
+              DEBUG ((DEBUG_ERROR, "%a: %a size is not match: %u\r\n", __FUNCTION__, ACPI_DPL1_STA, AcpiNodeInfo.Size));
+              goto ErrorExit;
+            }
+
+            DpllStatus = 0xF;
+            Status     = PatchProtocol->SetNodeData (PatchProtocol, &AcpiNodeInfo, &DpllStatus, sizeof (DpllStatus));
+            if (EFI_ERROR (Status)) {
+              DEBUG ((DEBUG_ERROR, "%a: Error updating %a - %r\r\n", __FUNCTION__, ACPI_DPL1_STA, Status));
+              goto ErrorExit;
+            }
           }
         }
 
@@ -635,6 +656,7 @@ ErrorExit:
     "_SB_.I2C3.SSIF._STA"
     "_SB_.I2CB._STA"
     "_SB_.I2C2.EEP1._STA"
+    "_SB_.I2C2.DPL1._STA"
     "_SB_.I2CB.EEP2._STA"
 
   A parser parses a Device Tree to populate a specific CmObj type. None,
