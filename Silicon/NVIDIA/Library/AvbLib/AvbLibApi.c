@@ -1158,10 +1158,6 @@ AvbVerifyBoot (
 
   DEBUG ((DEBUG_ERROR, "%a: Android verifiedbootstate = %a\n", __FUNCTION__, BootStateStr));
 
-  // WAR to make it always in "orange state" as bootloader-unlock for fastbootd flash and adb remount
-  // TODO: remove this WAR when AVB TA/RPMB is implmented to store unlock state
-  BootStateStr = "orange";
-
   Status = GetBootConfigUpdateProtocol (&BootConfigUpdate);
   if (EFI_ERROR (Status)) {
     DEBUG ((DEBUG_ERROR, "%a: %r to get BootConfigUpdateProtocol\n", __FUNCTION__, Status));
