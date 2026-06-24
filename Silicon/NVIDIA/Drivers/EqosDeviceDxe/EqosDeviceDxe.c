@@ -18,6 +18,7 @@
 #include <Library/IoLib.h>
 #include <Library/DeviceDiscoveryDriverLib.h>
 #include <Library/DevicePathLib.h>
+#include <Library/DeviceTreeHelperLib.h>
 #include <Library/DmaLib.h>
 #include <Library/MemoryAllocationLib.h>
 #include <Library/NetLib.h>
@@ -195,9 +196,26 @@ DeviceDiscoveryNotify (
   INT32                        PropertySize;
   CONST UINT8                  *MacAddress;
   BOOLEAN                      T26xMgbe;
+  INT32                        NodeOffset;
 
   PlatformType = TegraGetPlatform ();
   switch (Phase) {
+    case DeviceDiscoveryDriverBindingSupported:
+      if (NULL != DeviceTreeNode) {
+        Status = DeviceTreeGetNamedSubnode ("fixed-link", DeviceTreeNode->NodeOffset, &NodeOffset);
+        if (!EFI_ERROR (Status)) {
+          DEBUG ((
+            DEBUG_ERROR,
+            "%a: fixed-link subnode not supported, skipping %a\n",
+            __FUNCTION__,
+            FdtGetName (DeviceTreeNode->DeviceTreeBase, DeviceTreeNode->NodeOffset, NULL)
+            ));
+          return EFI_UNSUPPORTED;
+        }
+      }
+
+      return EFI_SUCCESS;
+
     case DeviceDiscoveryDriverBindingStart:
       if ((DeviceTreeNode == NULL) ||
           (DeviceTreeNode->NodeOffset < 0))
