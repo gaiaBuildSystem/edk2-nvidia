@@ -1,7 +1,7 @@
 /** @file
   Google Test mocks SmmVariable Prototcol
 
-  SPDX-FileCopyrightText: Copyright (c) 2023, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+  SPDX-FileCopyrightText: Copyright (c) 2023-2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
   SPDX-License-Identifier: BSD-2-Clause-Patent
 **/
 
@@ -11,8 +11,8 @@
 #include <Library/GoogleTestLib.h>
 #include <Library/FunctionMockLib.h>
 extern "C" {
-#include <Uefi.h>
-#include <Protocol/SmmVariable.h>
+  #include <Uefi.h>
+  #include <Protocol/SmmVariable.h>
 }
 
 struct MockSmmVarProto {
@@ -26,6 +26,14 @@ struct MockSmmVarProto {
      OUT     UINT32    *Attributes OPTIONAL,
      IN OUT  UINTN     *DataSize,
      OUT     VOID      *Data)
+    );
+
+  MOCK_FUNCTION_DECLARATION (
+    EFI_STATUS,
+    SmmVarProto_SmmGetNextVariableName,
+    (IN OUT  UINTN     *VariableNameSize,
+     IN OUT  CHAR16    *VariableName,
+     IN OUT  EFI_GUID  *VendorGuid)
     );
 };
 
