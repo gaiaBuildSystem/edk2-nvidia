@@ -9,7 +9,7 @@
   SKUID_IDENTIFIER               = ALL
   PLATFORM_VERSION               = 0.1
   DSC_SPECIFICATION              = 0x00010005
-  SUPPORTED_ARCHITECTURES        = IA32|X64
+  SUPPORTED_ARCHITECTURES        = IA32|X64|AARCH64
   BUILD_TARGETS                  = DEBUG|RELEASE|NOOPT
   FLASH_DEFINITION               = Platform/NVIDIA/HostBasedTests/HostBasedTests.fdf
 

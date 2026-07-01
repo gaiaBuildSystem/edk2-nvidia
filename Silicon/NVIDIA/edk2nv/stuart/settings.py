@@ -1,5 +1,5 @@
 # Copyright (c) Microsoft Corporation.
-# SPDX-FileCopyrightText: Copyright (c) 2021-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2021-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 #
 # SPDX-License-Identifier: BSD-2-Clause-Patent
 
@@ -612,7 +612,7 @@ class NVIDIACiSettingsManager(AbstractNVIDIASettingsManager,
 
     def GetArchitecturesSupported(self):
         ''' return iterable of edk2 architectures supported by this build '''
-        return ("X64",)
+        return ("X64", "AARCH64")
 
     def GetTargetsSupported(self):
         ''' return iterable of edk2 target tags supported by this build '''

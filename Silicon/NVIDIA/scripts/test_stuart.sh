@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# SPDX-FileCopyrightText: Copyright (c) 2021-2023, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2021-2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 #
 # SPDX-License-Identifier: BSD-2-Clause-Patent
 
@@ -30,5 +30,17 @@ _msg "Activating Python virtual environment."
 
 STUART_TEST_OPTIONS=${STUART_TEST_OPTIONS:---verbose}
 
+# Host-based tests build native executables, so the edk2 architecture must
+# match the host.  Honor HOSTAPP_ARCH if set, otherwise derive it from the
+# host machine type.
+if [ -z "${HOSTAPP_ARCH}" ]; then
+  case "$(uname -m)" in
+    aarch64 | arm64) HOSTAPP_ARCH=AARCH64 ;;
+    x86_64 | amd64)  HOSTAPP_ARCH=X64 ;;
+    *) _die 4 "Unsupported host machine type for host-based tests: $(uname -m)" ;;
+  esac
+fi
+_msg "Building host-based tests for ${HOSTAPP_ARCH}."
+
 _msg "Testing ($PLATFORM_BUILD)."
-stuart_ci_build -t NOOPT -a X64 -p ${PACKAGE} -c ${PLATFORM_BUILD} ${STUART_TEST_OPTIONS}
+stuart_ci_build -t NOOPT -a ${HOSTAPP_ARCH} -p ${PACKAGE} -c ${PLATFORM_BUILD} ${STUART_TEST_OPTIONS}
