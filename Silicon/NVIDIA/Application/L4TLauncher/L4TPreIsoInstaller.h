@@ -41,8 +41,6 @@
 #define SHA256_DIGEST_SIZE      32
 #define SHA256_HEX_STRING_SIZE  (SHA256_DIGEST_SIZE * 2)
 
-#define CAPSULE_CONFIRM_TIMEOUT_SEC  30
-
 #define ISO9660_PVD_OFFSET     32768    // Sector 16 in 2048-byte sectors
 #define ISO9660_VOLDESC_MAGIC  "CD001"
 #define ISO9660_MAGIC_LEN      5
@@ -160,7 +158,7 @@ LoadAndStartShim (
   @param[in]  DeviceHandle   Device handle for ESP.
 
   @retval EFI_SUCCESS        ISO medium handled (or not an ISO medium).
-  @retval EFI_ABORTED        Capsule boot loop detected — caller must halt.
+  @retval EFI_ABORTED        PreIsoInstaller blocked ISO boot; caller must halt.
   @retval Other              Fatal error from shim load.
 
 **/

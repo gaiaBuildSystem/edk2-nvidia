@@ -2455,17 +2455,16 @@ ShouldPerformCapsuleUpdate (
 /**
   Prompt the user to confirm the QSPI capsule update.
 
-  Displays the capsule file name and firmware version information,
-  then waits up to CAPSULE_CONFIRM_TIMEOUT_SEC seconds for the user
-  to press 'Y' (proceed) or 'N' (skip).  If no key is pressed before
-  the timeout, the update is skipped automatically.
+  Displays firmware version information, then waits indefinitely for the user
+  to press 'Y' to accept the update. Other input is rejected and the
+  prompt continues waiting.
 
   @param[in]  PreIsoInstallerVersion Capsule firmware version.
   @param[in]  CurrentSlotVersion    Version of current active slot.
   @param[in]  NonCurrentSlotVersion Version of non-active slot.
 
-  @retval TRUE   User confirmed the update.
-  @retval FALSE  User declined (or timeout expired).
+  @retval TRUE   User accepted the update.
+  @retval FALSE  Input handling failed.
 
 **/
 STATIC
@@ -2478,11 +2477,9 @@ ConfirmCapsuleUpdate (
 {
   EFI_STATUS     Status;
   EFI_INPUT_KEY  Key;
-  EFI_EVENT      TimerEvent;
-  EFI_EVENT      WaitEvents[2];
+  EFI_EVENT      WaitEvent;
   UINT32         LowerVersion;
   UINTN          EventIndex;
-  UINTN          Remaining;
 
   if (CurrentSlotVersion <= NonCurrentSlotVersion) {
     LowerVersion = CurrentSlotVersion;
@@ -2507,12 +2504,13 @@ ConfirmCapsuleUpdate (
     LowerVersion & 0xFF
     );
   PreIsoLogPrint (L"\r\n");
-  PreIsoLogPrint (L"  WARNING: Skipping the firmware update may cause the\r\n");
-  PreIsoLogPrint (L"  subsequent ISO installation to fail.\r\n");
+  PreIsoLogPrint (L"  WARNING: The ISO installation cannot continue until\r\n");
+  PreIsoLogPrint (L"  this firmware update is accepted.\r\n");
   PreIsoLogPrint (L"\r\n");
   PreIsoLogPrint (L"  Do you want to update the firmware?\r\n");
-  PreIsoLogPrint (L"  Press [Y] to proceed, [N] to skip.\r\n");
-  PreIsoLogPrint (L"  Auto-skipping in %d seconds...\r\n", CAPSULE_CONFIRM_TIMEOUT_SEC);
+  PreIsoLogPrint (L"  Press [Y] to accept and proceed.\r\n");
+  PreIsoLogPrint (L"  Any other key keeps waiting for confirmation.\r\n");
+  PreIsoLogPrint (L"  Waiting for input; no timeout is applied.\r\n");
   PreIsoLogPrint (L"\r\n");
   PreIsoLogPrint (L"  The older firmware will be updated to the new version.\r\n");
   PreIsoLogPrint (L"  Automatic reboots will occur. Do not power off\r\n");
@@ -2523,58 +2521,27 @@ ConfirmCapsuleUpdate (
   while (gST->ConIn->ReadKeyStroke (gST->ConIn, &Key) == EFI_SUCCESS) {
   }
 
-  Status = gBS->CreateEvent (EVT_TIMER, TPL_CALLBACK, NULL, NULL, &TimerEvent);
-  if (EFI_ERROR (Status)) {
-    PreIsoLogPrint (L"%a: Cannot create timer, skipping update\r\n", __FUNCTION__);
-    return FALSE;
-  }
+  WaitEvent = gST->ConIn->WaitForKey;
 
-  Status = gBS->SetTimer (TimerEvent, TimerRelative, 10000000ULL);
-  if (EFI_ERROR (Status)) {
-    gBS->CloseEvent (TimerEvent);
-    PreIsoLogPrint (L"%a: Cannot set timer, skipping update\r\n", __FUNCTION__);
-    return FALSE;
-  }
-
-  WaitEvents[0] = gST->ConIn->WaitForKey;
-  WaitEvents[1] = TimerEvent;
-  Remaining     = CAPSULE_CONFIRM_TIMEOUT_SEC;
-
-  while (Remaining > 0) {
-    Status = gBS->WaitForEvent (2, WaitEvents, &EventIndex);
+  while (TRUE) {
+    Status = gBS->WaitForEvent (1, &WaitEvent, &EventIndex);
     if (EFI_ERROR (Status)) {
-      break;
+      PreIsoLogPrint (L"%a: Failed to wait for confirmation input: %r\r\n", __FUNCTION__, Status);
+      return FALSE;
     }
 
-    if (EventIndex == 0) {
-      Status = gST->ConIn->ReadKeyStroke (gST->ConIn, &Key);
-      if (!EFI_ERROR (Status)) {
-        if ((Key.UnicodeChar == L'Y') || (Key.UnicodeChar == L'y')) {
-          PreIsoLogPrint (L"  User confirmed. Proceeding with capsule update.\r\n");
-          gBS->CloseEvent (TimerEvent);
-          return TRUE;
-        }
-
-        if ((Key.UnicodeChar == L'N') || (Key.UnicodeChar == L'n')) {
-          PreIsoLogPrint (L"  User declined. Skipping capsule update.\r\n");
-          gBS->CloseEvent (TimerEvent);
-          return FALSE;
-        }
-      }
-    } else {
-      Remaining--;
-      PreIsoLogPrint (L"  %d seconds remaining...\r\n", Remaining);
-      if (Remaining == 0) {
-        break;
-      }
-
-      gBS->SetTimer (TimerEvent, TimerRelative, 10000000ULL);
+    Status = gST->ConIn->ReadKeyStroke (gST->ConIn, &Key);
+    if (EFI_ERROR (Status)) {
+      continue;
     }
+
+    if ((Key.UnicodeChar == L'Y') || (Key.UnicodeChar == L'y')) {
+      PreIsoLogPrint (L"  User accepted. Proceeding with capsule update.\r\n");
+      return TRUE;
+    }
+
+    PreIsoLogPrint (L"  Invalid input. Press [Y] to accept the firmware update.\r\n");
   }
-
-  gBS->CloseEvent (TimerEvent);
-  PreIsoLogPrint (L"  Timeout reached. Skipping capsule update.\r\n");
-  return FALSE;
 }
 
 /**
@@ -2686,6 +2653,7 @@ LoadAndStartShim (
 
   @retval EFI_SUCCESS        No update needed, continue with normal boot.
   @retval EFI_NOT_READY      Update not needed, continue with normal boot.
+  @retval EFI_ABORTED        ISO installation must halt.
   @retval Other              Error occurred during PreIsoInstaller execution.
 
 **/
@@ -2839,14 +2807,14 @@ RunPreIsoInstaller (
 
   if (StagedFlag == 0) {
     if (!ConfirmCapsuleUpdate (PreIsoInstallerVersion, CurrentSlotVersion, NonCurrentSlotVersion)) {
-      PreIsoLogPrint (L"%a: Capsule update skipped by user\r\n", __FUNCTION__);
-      Status = EFI_NOT_READY;
+      PreIsoLogPrint (L"%a: Capsule update confirmation failed, aborting ISO installation\r\n", __FUNCTION__);
+      Status = EFI_ABORTED;
       goto Done;
     }
   }
 
-  // Increment the staging counter after user confirms but before the actual
-  // capsule staging.  This ensures skipping does not consume an attempt.
+  // Increment the staging counter after user accepts but before the actual
+  // capsule staging.
   StagedFlag++;
   Status = gRT->SetVariable (
                   PREISO_CAPSULE_STAGED_VARIABLE_NAME,
@@ -2883,7 +2851,7 @@ Done:
   @param[in]  DeviceHandle   Device handle for ESP.
 
   @retval EFI_SUCCESS        ISO medium handled (or not an ISO medium).
-  @retval EFI_ABORTED        Capsule boot loop detected — caller must halt.
+  @retval EFI_ABORTED        PreIsoInstaller blocked ISO boot; caller must halt.
   @retval Other              Fatal error from shim load.
 
 **/

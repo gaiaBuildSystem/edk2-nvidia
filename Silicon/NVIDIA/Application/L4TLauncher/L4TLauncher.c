@@ -2783,7 +2783,7 @@ L4TLauncher (
 
   Status = HandleIsoBootMedia (ImageHandle, DeviceHandle);
   if (Status == EFI_ABORTED) {
-    ErrorPrint (L"%a: Iso boot loop detected, halting\r\n", __FUNCTION__);
+    ErrorPrint (L"%a: PreIsoInstaller blocked ISO boot, halting\r\n", __FUNCTION__);
     CpuDeadLoop ();
   } else if (EFI_ERROR (Status)) {
     return Status;

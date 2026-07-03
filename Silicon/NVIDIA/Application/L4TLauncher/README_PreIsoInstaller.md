@@ -32,7 +32,7 @@ L4TLauncher
         |     +-- Read board info from CVM EEPROM
         |     +-- Ensure TegraPlatformSpec / TegraPlatformCompatSpec variables
         |     +-- Select capsule file based on board ID, SKU, FAB
-        |     +-- Prompt user for confirmation (30s timeout, auto-skip if no input)
+        |     +-- Prompt user for confirmation (wait indefinitely; abort if declined)
         |     +-- Copy capsule to EFI\UpdateCapsule\, set OsIndications, warm reset
         |     +-- PreIsoLogClose
         |
@@ -71,12 +71,13 @@ a prompt is displayed on the console:
   New FW version   : <branch>.<major>.<minor>
   Lower FW version : <branch>.<major>.<minor>
 
-  WARNING: Skipping the firmware update may cause the
-  subsequent ISO installation to fail.
+  WARNING: The ISO installation cannot continue until
+  this firmware update is accepted.
 
   Do you want to update the firmware?
-  Press [Y] to proceed, [N] to skip.
-  Auto-skipping in 30 seconds...
+  Press [Y] to accept and proceed.
+  Any other key keeps waiting for confirmation.
+  Waiting for input; no timeout is applied.
 
   The older firmware will be updated to the new version.
   Automatic reboots will occur. Do not power off
@@ -91,8 +92,8 @@ Version format `0xAABBCCDD` is displayed as `BB.CC.DD` in decimal;
 
 - **[Y]**: Proceeds with capsule update (stages capsule, sets OsIndications,
   warm reset). On success, `ResetSystem` does not return.
-- **[N]**: Skips capsule update and continues to shim boot.
-- **Timeout (30s)**: Automatically skips the update.
+- **Any other key**: Prints a reminder and keeps waiting.
+- **No timeout**: The prompt waits indefinitely until the user presses `Y`.
 
 On subsequent staging attempts (StagedFlag > 0, i.e., after a reboot from a
 previous capsule update for a remaining slot), the prompt is skipped and
@@ -231,8 +232,8 @@ capsule has been staged. Normal A/B slot updates require 2 staging cycles.
 If the counter reaches 5 without the firmware version being bumped (indicating
 the capsule is failing to apply), the update is aborted with `EFI_ABORTED`,
 the `OsIndications` capsule delivery flag is cleared, and the staged counter
-is deleted. `L4TLauncher` prints `Iso boot loop detected, halting` and
-halts the system (`CpuDeadLoop`) on `EFI_ABORTED`.
+is deleted. `L4TLauncher` prints `PreIsoInstaller blocked ISO boot, halting`
+and halts the system (`CpuDeadLoop`) on `EFI_ABORTED`.
 
 Failed staging attempts (e.g., `PerformCapsuleUpdate` errors) still count
 toward the limit — the counter is not decremented on failure. This ensures
