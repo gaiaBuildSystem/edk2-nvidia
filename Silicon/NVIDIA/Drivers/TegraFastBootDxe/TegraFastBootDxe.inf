@@ -22,8 +22,11 @@
 [LibraryClasses]
   BaseLib
   BaseMemoryLib
+  BootChainInfoLib
   DebugLib
   MemoryAllocationLib
+  PcdLib
+  PrintLib
   UefiBootServicesTableLib
   UefiDriverEntryPoint
 
@@ -32,7 +35,12 @@
   gEfiPartitionInfoProtocolGuid
   gEfiBlockIoProtocolGuid
   gEfiDiskIoProtocolGuid
+  gNVIDIABootChainProtocolGuid           ## SOMETIMES_CONSUMES
+
+[Pcd]
+  gNVIDIATokenSpaceGuid.PcdAndroidFastbootMaxDownloadSize   ## CONSUMES
 
 [Packages]
   EmbeddedPkg/EmbeddedPkg.dec
   MdePkg/MdePkg.dec
+  Silicon/NVIDIA/NVIDIA.dec

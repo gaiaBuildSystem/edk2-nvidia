@@ -540,6 +540,13 @@
 #Force platform type to TEGRA_PLATFORM_SILICON
   gNVIDIATokenSpaceGuid.PcdTegraForceSiliconPlatform|FALSE|BOOLEAN|0x00000172
 
+# Per-transfer cap reported by UEFI fastboot's getvar:max-download-size.
+# Fastboot host uses this to split sparse-image chunks. It is not a hard limit
+# on total image size, but each chunk allocation happens up-front from
+# BootServices memory, so keep it well inside what the SKU can spare.
+# Default 256 MiB matches the historical Tegra bootloader behaviour.
+  gNVIDIATokenSpaceGuid.PcdAndroidFastbootMaxDownloadSize|0x10000000|UINT32|0x00000173
+
 #Indicate if there is a GPT for each boot chain
   gNVIDIATokenSpaceGuid.PcdGptIsPerBootChain|FALSE|BOOLEAN|0x000000A5
 

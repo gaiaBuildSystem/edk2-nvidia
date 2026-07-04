@@ -86,6 +86,95 @@ STATIC EFI_EVENT  mFatalSendErrorEvent;
 #define FASTBOOT_STRING_MAX_LENGTH   256
 #define FASTBOOT_COMMAND_MAX_LENGTH  64
 
+//
+// Variables enumerated by `fastboot getvar all`.
+//
+// The fastboot platform protocol has no enumeration API, so the set of vars
+// visible to `getvar all` is defined here. Names in this list are queried via
+// the same code path as an explicit getvar:<name>, so what host sees for
+// `getvar all` is exactly what it would see querying each name individually.
+//
+// "version" is protocol-level and handled inline.
+//
+STATIC CONST CHAR8 *CONST  mGetVarAllList[] = {
+  "version",
+  "max-download-size",
+  "current-slot",
+  "slot-suffix",
+  "slot-count",
+  //
+  // Physical A/B GPT partitions only. Dynamic (logical) partitions like
+  // system / vendor / product / system_ext / odm live inside super.img and
+  // are only reachable via userspace fastbootd, not this UEFI fastboot.
+  // Keep in sync with mAbPartitions[] in TegraFastBoot.c.
+  //
+  "has-slot:boot",
+  "has-slot:init_boot",
+  "has-slot:vendor_boot",
+  "has-slot:dtbo",
+  "has-slot:vbmeta",
+  "has-slot:vbmeta_system",
+  "has-slot:vbmeta_vendor",
+  "has-slot:kernel-dtb",
+};
+
+STATIC
+VOID
+SendGetVarInfo (
+  IN CONST CHAR8  *Name,
+  IN CONST CHAR8  *Value
+  )
+{
+  CHAR8  Buf[FASTBOOT_STRING_MAX_LENGTH];
+  UINTN  Len;
+
+  //
+  // fastboot host displays each INFO line as "(bootloader) <name>: <value>".
+  //
+  Len = AsciiSPrint (Buf, sizeof (Buf), "INFO%a: %a", Name, Value);
+  mTransport->Send (Len, Buf, &mFatalSendErrorEvent);
+}
+
+STATIC
+VOID
+HandleGetVarAll (
+  VOID
+  )
+{
+  UINTN        Index;
+  CONST CHAR8  *Name;
+  CHAR8        ValueBuf[FASTBOOT_COMMAND_MAX_LENGTH];
+  EFI_STATUS   Status;
+
+  for (Index = 0; Index < ARRAY_SIZE (mGetVarAllList); Index++) {
+    Name = mGetVarAllList[Index];
+
+    if (AsciiStrCmp (Name, "version") == 0) {
+      SendGetVarInfo (Name, ANDROID_FASTBOOT_VERSION);
+      continue;
+    }
+
+    ValueBuf[0] = '\0';
+    Status      = mPlatform->GetVar ((CHAR8 *)Name, ValueBuf);
+    if (EFI_ERROR (Status)) {
+      continue;
+    }
+
+    //
+    // Skip variables the platform doesn't answer (empty value). This keeps
+    // `getvar all` output tight instead of dumping a wall of empty lines when
+    // the platform GetVar stub returns success + "" for unknown names.
+    //
+    if (ValueBuf[0] == '\0') {
+      continue;
+    }
+
+    SendGetVarInfo (Name, ValueBuf);
+  }
+
+  SEND_LITERAL ("OKAY");
+}
+
 STATIC
 VOID
 HandleGetVar (
@@ -95,17 +184,25 @@ HandleGetVar (
   CHAR8       Response[FASTBOOT_COMMAND_MAX_LENGTH + 1] = "OKAY";
   EFI_STATUS  Status;
 
+  // `getvar all` iterates every variable we know how to answer and streams
+  // them as INFO lines terminated by OKAY.
+  if (AsciiStrCmp (CmdArg, "all") == 0) {
+    HandleGetVarAll ();
+    return;
+  }
+
   // Respond to getvar:version with 0.4 (version of Fastboot protocol)
-  if (!AsciiStrnCmp ("version", CmdArg, sizeof ("version") - 1)) {
+  if (!AsciiStrnCmp ("version", CmdArg, AsciiStrLen ("version"))) {
     SEND_LITERAL ("OKAY" ANDROID_FASTBOOT_VERSION);
+    return;
+  }
+
+  // All other variables are assumed to be platform specific
+  Status = mPlatform->GetVar (CmdArg, Response + 4);
+  if (EFI_ERROR (Status)) {
+    SEND_LITERAL ("FAILSomething went wrong when looking up the variable");
   } else {
-    // All other variables are assumed to be platform specific
-    Status = mPlatform->GetVar (CmdArg, Response + 4);
-    if (EFI_ERROR (Status)) {
-      SEND_LITERAL ("FAILSomething went wrong when looking up the variable");
-    } else {
-      mTransport->Send (AsciiStrLen (Response), Response, &mFatalSendErrorEvent);
-    }
+    mTransport->Send (AsciiStrLen (Response), Response, &mFatalSendErrorEvent);
   }
 }
 

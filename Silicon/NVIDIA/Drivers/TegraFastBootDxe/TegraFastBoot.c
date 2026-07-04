@@ -17,14 +17,74 @@
 #include <Protocol/PartitionInfo.h>
 #include <Protocol/BlockIo.h>
 #include <Protocol/DiskIo.h>
+#include <Protocol/BootChainProtocol.h>
 
 #include <Library/BaseLib.h>
 #include <Library/BaseMemoryLib.h>
+#include <Library/BootChainInfoLib.h>
 #include <Library/DebugLib.h>
 #include <Library/MemoryAllocationLib.h>
+#include <Library/PcdLib.h>
+#include <Library/PrintLib.h>
 #include <Library/UefiBootServicesTableLib.h>
 
 #define GPT_PARTITION_NAME_LENGTH  36
+
+//
+// Fastboot getvar reply buffer size, in bytes.
+//
+// The caller in AndroidFastbootApp.c does:
+//   CHAR8  Response[FASTBOOT_COMMAND_MAX_LENGTH + 1] = "OKAY";   // 65 bytes
+//   mPlatform->GetVar (CmdArg, Response + 4);
+// so we get 65 - 4 = 61 bytes at Value (60 chars + null). Anything larger
+// (e.g. 64) would overflow the caller's Response buffer, so this must stay
+// derived from the AndroidFastbootApp.c layout, not raised for convenience.
+//
+// Matches the value hard-coded by EDK2's own reference platform
+// (edk2-platforms/.../ArmVExpressFastBoot.c AsciiStrCpyS(Value, 61, ...)).
+//
+#define FB_GETVAR_MAX_VALUE_LEN  ((64 + 1) - 4)
+
+//
+// Physical A/B GPT partitions visible to UEFI fastboot on Tegra Android.
+// Used to answer getvar:has-slot:<name>.
+//
+// Only partitions that actually exist as GPT entries belong here, because
+// UEFI fastboot flashes via EFI_PARTITION_INFO_PROTOCOL / EFI_BLOCK_IO. The
+// classic Android logical partitions (system, vendor, product, system_ext,
+// odm) live inside super.img and are only accessible from userspace
+// fastbootd, not from UEFI - so they must not be advertised here or host
+// tooling will try to flash them through us and get EFI_NOT_FOUND.
+//
+// kernel-dtb is Tegra-specific (see AndroidBootDxe.c
+// pKernelPartitionDtbMapping and PcdKernelDtbPartitionName in NVIDIA.dec).
+//
+STATIC CONST CHAR8 *CONST  mAbPartitions[] = {
+  "boot",
+  "init_boot",
+  "vendor_boot",
+  "dtbo",
+  "vbmeta",
+  "vbmeta_system",
+  "vbmeta_vendor",
+  "kernel-dtb",
+};
+
+//
+// ASCII slot suffix table indexed by BOOT_CHAIN_A / BOOT_CHAIN_B.
+//
+// Mirrors BootChainInfoLib's file-local SuffixPartitionNameId[] (CHAR16).
+// We cannot reuse GetBootChainPartitionName() here because:
+//   - it works in CHAR16, and
+//   - on Tegra with PcdPartitionNamesHaveSuffixes=FALSE (T234/T264 default)
+//     it emits the firmware-side "A_" / "B_" prefix form, whereas fastboot
+//     host and Android userspace always use the AOSP "_a" / "_b" suffix
+//     regardless of how firmware partitions are named.
+//
+STATIC CONST CHAR8 *CONST  mBootChainSlotSuffix[BOOT_CHAIN_COUNT] = {
+  "_a",   // BOOT_CHAIN_A
+  "_b",   // BOOT_CHAIN_B
+};
 
 //
 // Erase tunables. The Tegra eMMC/SD bdev does not expose a hardware
@@ -458,8 +518,96 @@ TegraFastbootPlatformGetVar (
   OUT CHAR8  *Value
   )
 {
-  *Value = '\0';
+  EFI_STATUS                  Status;
+  NVIDIA_BOOT_CHAIN_PROTOCOL  *BootChain;
+  UINT32                      ActiveSlot;
+  CONST CHAR8                 *Suffix;
+  CONST CHAR8                 *HasSlotPrefix;
+  CONST CHAR8                 *Base;
+  UINTN                       Index;
 
+  if ((Name == NULL) || (Value == NULL)) {
+    return EFI_INVALID_PARAMETER;
+  }
+
+  *Value        = '\0';
+  HasSlotPrefix = "has-slot:";
+
+  if (AsciiStrCmp (Name, "max-download-size") == 0) {
+    //
+    // Sourced from PcdAndroidFastbootMaxDownloadSize (NVIDIA.dec) so per-SKU
+    // DSC files can tune the cap without rebuilding this driver. EDK2 has no
+    // shared PCD for this in EmbeddedPkg; only USB IDs and TCP port live
+    // there.
+    //
+    AsciiSPrint (
+      Value,
+      FB_GETVAR_MAX_VALUE_LEN,
+      "0x%x",
+      PcdGet32 (PcdAndroidFastbootMaxDownloadSize)
+      );
+    return EFI_SUCCESS;
+  }
+
+  if (AsciiStrCmp (Name, "slot-count") == 0) {
+    AsciiSPrint (Value, FB_GETVAR_MAX_VALUE_LEN, "%u", (UINT32)BOOT_CHAIN_COUNT);
+    return EFI_SUCCESS;
+  }
+
+  if ((AsciiStrCmp (Name, "current-slot") == 0) ||
+      (AsciiStrCmp (Name, "slot-suffix")  == 0))
+  {
+    //
+    // Prefer the runtime BootChain protocol so we track any in-session slot
+    // switch. Fall back to the GPT-time boot chain if the protocol has not
+    // been installed yet (e.g. very early fastboot entry).
+    //
+    BootChain = NULL;
+    Status    = gBS->LocateProtocol (
+                       &gNVIDIABootChainProtocolGuid,
+                       NULL,
+                       (VOID **)&BootChain
+                       );
+    if (!EFI_ERROR (Status) && (BootChain != NULL)) {
+      ActiveSlot = BootChain->ActiveBootChain;
+    } else {
+      ActiveSlot = GetBootChainForGpt ();
+    }
+
+    if (ActiveSlot >= ARRAY_SIZE (mBootChainSlotSuffix)) {
+      ActiveSlot = BOOT_CHAIN_A;
+    }
+
+    Suffix = mBootChainSlotSuffix[ActiveSlot];
+
+    if (AsciiStrCmp (Name, "current-slot") == 0) {
+      // fastboot host wants just the slot letter ("a"/"b"), i.e. suffix without
+      // the leading '_'.
+      AsciiStrCpyS (Value, FB_GETVAR_MAX_VALUE_LEN, Suffix + 1);
+    } else {
+      AsciiStrCpyS (Value, FB_GETVAR_MAX_VALUE_LEN, Suffix);
+    }
+
+    return EFI_SUCCESS;
+  }
+
+  if (AsciiStrnCmp (Name, HasSlotPrefix, AsciiStrLen (HasSlotPrefix)) == 0) {
+    Base = Name + AsciiStrLen (HasSlotPrefix);
+    for (Index = 0; Index < ARRAY_SIZE (mAbPartitions); Index++) {
+      if (AsciiStrCmp (Base, mAbPartitions[Index]) == 0) {
+        AsciiStrCpyS (Value, FB_GETVAR_MAX_VALUE_LEN, "yes");
+        return EFI_SUCCESS;
+      }
+    }
+
+    AsciiStrCpyS (Value, FB_GETVAR_MAX_VALUE_LEN, "no");
+    return EFI_SUCCESS;
+  }
+
+  //
+  // Unknown variable: leave Value as empty string and return success so the
+  // host sees "OKAY" with an empty payload, matching fastboot conventions.
+  //
   return EFI_SUCCESS;
 }
 
