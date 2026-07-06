@@ -1560,11 +1560,13 @@ ExtLinuxBoot (
   // Process Args if present
   if (BootOption->BootArgs != NULL) {
     ArgSize = StrSize (BootOption->BootArgs) + MAX_CBOOTARG_SIZE;
-    NewArgs = AllocateCopyPool (ArgSize, BootOption->BootArgs);
+    NewArgs = AllocateZeroPool (ArgSize);
     if (NewArgs == NULL) {
       Status = EFI_OUT_OF_RESOURCES;
       goto Exit;
     }
+
+    CopyMem (NewArgs, BootOption->BootArgs, StrSize (BootOption->BootArgs));
 
     Status = gBS->LocateProtocol (&gNVIDIAPlatformKernelArgsProtocolGuid, NULL, (VOID **)&KernelArgsProtocol);
     if (!EFI_ERROR (Status)) {
@@ -1641,7 +1643,7 @@ ExtLinuxBoot (
 
     if (BootOption->Overlays != NULL) {
       DEBUG ((DEBUG_INFO, "%a: applying overlays %s\r\n", __FUNCTION__, BootOption->Overlays));
-      Overlays = AllocateCopyPool (StrSize (BootOption->Overlays) * sizeof (CHAR16), BootOption->Overlays);
+      Overlays = AllocateCopyPool (StrSize (BootOption->Overlays), BootOption->Overlays);
       if (Overlays == NULL) {
         Status = EFI_OUT_OF_RESOURCES;
         goto Exit;
