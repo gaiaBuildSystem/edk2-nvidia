@@ -97,7 +97,7 @@ MmPrmSendCommBuffer (
   }
 
   Status = mMmPrmCommProtocol->Communicate (
-                                 mMmCommProtocol,
+                                 mMmPrmCommProtocol,
                                  mMmCommBufferPhysical,
                                  mMmCommBuffer,
                                  &CommSize
