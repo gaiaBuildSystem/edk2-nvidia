@@ -2082,6 +2082,14 @@ ReadAndroidStyleKernelPartition (
       DEBUG ((DEBUG_ERROR, "%a: Verify signature with 2KB alignment\r\n", __FUNCTION__));
       SignatureSize   = SIG_FILE_SIZE_2KB;
       SignatureOffset = ALIGN_VALUE (ImageBufferSize, SignatureSize);
+      if ((SignatureOffset > DecryptedImageBufferSize) ||
+          (DecryptedImageBufferSize - SignatureOffset < SignatureSize))
+      {
+        ErrorPrint (L"Signature offset exceeds decrypted image size\r\n");
+        Status = EFI_SECURITY_VIOLATION;
+        goto Exit;
+      }
+
       CopyMem (SignatureBuffer, (VOID *)(ImageBuffer + SignatureOffset), SignatureSize);
       Status = VerifyDetachedSignature (
                  SignatureBuffer,
