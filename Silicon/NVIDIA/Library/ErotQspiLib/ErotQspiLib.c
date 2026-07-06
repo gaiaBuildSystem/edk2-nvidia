@@ -438,9 +438,14 @@ ErotQspiRecv (
       continue;
     }
 
+    if (PacketLength < OFFSET_OF (EROT_QSPI_PACKET, Payload)) {
+      DEBUG ((DEBUG_ERROR, "%a: packet length too small %u\n", __FUNCTION__, PacketLength));
+      return EFI_PROTOCOL_ERROR;
+    }
+
     PayloadLength = PacketLength - OFFSET_OF (EROT_QSPI_PACKET, Payload);
 
-    if (*Length < MsgLength + PayloadLength) {
+    if (*Length - MsgLength < PayloadLength) {
       DEBUG ((DEBUG_ERROR, "%a: length error %u < %u\n", __FUNCTION__, *Length, MsgLength + PayloadLength));
       return EFI_BUFFER_TOO_SMALL;
     }
