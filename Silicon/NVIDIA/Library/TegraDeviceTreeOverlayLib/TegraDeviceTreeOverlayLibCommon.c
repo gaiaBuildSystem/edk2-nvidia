@@ -846,14 +846,6 @@ ApplyTegraDeviceTreeOverlayCommon (
     return EFI_INVALID_PARAMETER;
   }
 
-  BufPageCount = EFI_SIZE_TO_PAGES (FdtTotalSize (FdtBase));
-  FdtBuf       = AllocatePages (BufPageCount);
-
-  if (FdtBuf == NULL) {
-    DEBUG ((DEBUG_ERROR, "%a: Failed to allocate memory for overlay dtb. \n", __FUNCTION__));
-    return EFI_DEVICE_ERROR;
-  }
-
   Hob = GetFirstGuidHob (&gNVIDIAPlatformResourceDataGuid);
   if ((Hob != NULL) &&
       (GET_GUID_HOB_DATA_SIZE (Hob) == sizeof (TEGRA_PLATFORM_RESOURCE_INFO)))
@@ -870,11 +862,22 @@ ApplyTegraDeviceTreeOverlayCommon (
   BoardInfo = OverlayBoardInfo;
   Status    = EFI_SUCCESS;
   FdtNext   = FdtOverlay;
+  FdtBuf    = NULL;
   while (FdtCheckHeader ((VOID *)FdtNext) == 0) {
     /* Process and apply overlay */
     FdtSize = FdtTotalSize (FdtNext);
 
-    if (FdtOpenInto (FdtNext, FdtBuf, FdtSize)) {
+    // Allocate buffer sized to the current overlay so FdtOpenInto cannot
+    // overflow a base-DTB-sized buffer when an overlay is larger.
+    BufPageCount = EFI_SIZE_TO_PAGES (FdtSize);
+    FdtBuf       = AllocatePages (BufPageCount);
+    if (FdtBuf == NULL) {
+      DEBUG ((DEBUG_ERROR, "%a: Failed to allocate memory for overlay dtb. \n", __FUNCTION__));
+      Status = EFI_DEVICE_ERROR;
+      goto Exit;
+    }
+
+    if (FdtOpenInto (FdtNext, FdtBuf, EFI_PAGES_TO_SIZE (BufPageCount))) {
       DEBUG ((DEBUG_ERROR, "Failed to copy overlay device tree.\r\n"));
       Status =  EFI_LOAD_ERROR;
       goto Exit;
@@ -906,9 +909,15 @@ ApplyTegraDeviceTreeOverlayCommon (
 
     FdtNext = (VOID *)((UINT64)FdtNext + FdtSize);
     FdtNext = (VOID *)(ALIGN_VALUE ((UINT64)FdtNext, SIZE_4KB));
+
+    FreePages (FdtBuf, BufPageCount);
+    FdtBuf = NULL;
   }
 
 Exit:
-  FreePages (FdtBuf, BufPageCount);
+  if (FdtBuf != NULL) {
+    FreePages (FdtBuf, BufPageCount);
+  }
+
   return Status;
 }
