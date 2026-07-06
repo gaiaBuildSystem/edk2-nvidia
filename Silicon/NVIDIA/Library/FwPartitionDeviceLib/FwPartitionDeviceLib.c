@@ -649,6 +649,18 @@ FwDeviceAddAsPartition (
     return EFI_SUCCESS;
   }
 
+  // Re-validate capacity: sub-partition additions above may have filled the array.
+  if (mNumFwPartitions >= mMaxFwPartitions) {
+    DEBUG ((
+      DEBUG_ERROR,
+      "%a: Can't add partition %s, reached MaxFwPartitions=%u\n",
+      __FUNCTION__,
+      Name,
+      mMaxFwPartitions
+      ));
+    return EFI_OUT_OF_RESOURCES;
+  }
+
   Private       = &mPrivate[mNumFwPartitions];
   PartitionInfo = &Private->PartitionInfo;
 
