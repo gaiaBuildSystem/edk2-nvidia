@@ -418,7 +418,7 @@ ProcessEspVariable (
   )
 {
   EFI_STATUS  Status;
-  EFI_FILE    *File;
+  EFI_FILE    *File = NULL;
   CHAR16      VarName[VARIABLE_MAX_NAME];
   UINTN       VarSize;
   EFI_GUID    EfiVarGuid;
@@ -536,7 +536,7 @@ ProcessEspVariable (
   }
 
 exit:
-  if (FileHandleDelete (File) != EFI_SUCCESS) {
+  if ((File != NULL) && (FileHandleDelete (File) != EFI_SUCCESS)) {
     DEBUG ((
       DEBUG_ERROR,
       "%a: Failed to delete File %s\n",
