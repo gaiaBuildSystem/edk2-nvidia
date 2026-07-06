@@ -2057,7 +2057,19 @@ ReadAndroidStyleKernelPartition (
     }
 
     SignatureOffset = ALIGN_VALUE (ImageBufferSize, SignatureSize);
-    SignatureSize   = DecryptedImageBufferSize - SignatureOffset;
+    if (SignatureOffset > DecryptedImageBufferSize) {
+      ErrorPrint (L"Signature offset exceeds decrypted image size\r\n");
+      Status = EFI_SECURITY_VIOLATION;
+      goto Exit;
+    }
+
+    SignatureSize = DecryptedImageBufferSize - SignatureOffset;
+    if (SignatureSize > SIG_FILE_SIZE_4KB) {
+      ErrorPrint (L"Signature size exceeds allocated buffer\r\n");
+      Status = EFI_SECURITY_VIOLATION;
+      goto Exit;
+    }
+
     CopyMem (SignatureBuffer, ImageBuffer + SignatureOffset, SignatureSize);
     Status = VerifyDetachedSignature (
                SignatureBuffer,
