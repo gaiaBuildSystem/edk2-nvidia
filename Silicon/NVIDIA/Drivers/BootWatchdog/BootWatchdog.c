@@ -145,6 +145,11 @@ InitializeWatchdog (
              &ReadyToBootEvent
              );
   ASSERT_EFI_ERROR (Status);
+  // If ReadyToBootEvent creation failed, close the notification event to
+  // prevent a use-after-free when the driver is unloaded on error return.
+  if (EFI_ERROR (Status)) {
+    gBS->CloseEvent (WatchDogTimerReadyEvent);
+  }
 
   return Status;
 }
