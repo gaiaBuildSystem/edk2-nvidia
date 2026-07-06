@@ -409,6 +409,14 @@ FwPartitionWriteToUpdateInactivePartitions (
   FW_PARTITION_INFO                *PartitionInfo;
   CONST VOID                       *AlignedBuffer;
   FW_PARTITION_PSEUDO_DEVICE_INFO  *PseudoDeviceInfo;
+  UINT64                           NewOffset;
+  UINTN                            NewBytes;
+  BOOLEAN                          Overlap;
+  UINTN                            PartitionIndex;
+  FW_PARTITION_PRIVATE_DATA        *OtherPrivate;
+  UINT64                           OtherStart;
+  UINT64                           OtherEnd;
+  UINT64                           NewEnd;
 
   if ((DeviceInfo == NULL) || (Buffer == NULL)) {
     return EFI_INVALID_PARAMETER;
@@ -501,13 +509,51 @@ FwPartitionWriteToUpdateInactivePartitions (
       GptPartitionSizeInBlocks (Partition) * BlockSize
       ));
 
+    // Guard against integer overflow in the LBA-to-byte conversion
+    if ((Partition->StartingLBA > (MAX_UINT64 / BlockSize)) ||
+        (GptPartitionSizeInBlocks (Partition) > (MAX_UINT64 / BlockSize)))
+    {
+      return EFI_SECURITY_VIOLATION;
+    }
+
+    NewOffset = (PseudoDeviceInfo->MmDeviceInfo == NULL) ? (Partition->StartingLBA * BlockSize) : PartitionInfo->Offset;
+    NewBytes  = (UINTN)(GptPartitionSizeInBlocks (Partition) * BlockSize);
+    Overlap   = FALSE;
+
+    if (MAX_UINT64 - NewOffset < NewBytes) {
+      return EFI_SECURITY_VIOLATION;
+    }
+
+    // Reject any update that would cause the inactive partition to overlap
+    // an active or non-A/B protected partition.
+    for (PartitionIndex = 0; PartitionIndex < mNumFwPartitions; PartitionIndex++) {
+      OtherPrivate = &mPrivate[PartitionIndex];
+      if ((OtherPrivate != Private) &&
+          (OtherPrivate->PartitionInfo.IsActivePartition || NameIsInList (OtherPrivate->PartitionInfo.Name, NonABPartitionNames)))
+      {
+        OtherStart = OtherPrivate->PartitionInfo.Offset;
+        OtherEnd   = OtherStart + OtherPrivate->PartitionInfo.Bytes;
+        NewEnd     = NewOffset + NewBytes;
+
+        if ((NewOffset < OtherEnd) && (OtherStart < NewEnd)) {
+          DEBUG ((DEBUG_ERROR, "%a: %s overlaps protected partition %s\n", __FUNCTION__, Name, OtherPrivate->PartitionInfo.Name));
+          Overlap = TRUE;
+          break;
+        }
+      }
+    }
+
+    if (Overlap) {
+      return EFI_SECURITY_VIOLATION;
+    }
+
     if (PseudoDeviceInfo->MmDeviceInfo == NULL) {
-      PartitionInfo->Offset = Partition->StartingLBA * BlockSize;
+      PartitionInfo->Offset = NewOffset;
     } else {
       DEBUG ((DEBUG_INFO, "%a: no %s offset update for MM\n", __FUNCTION__, Name));
     }
 
-    PartitionInfo->Bytes = GptPartitionSizeInBlocks (Partition) * BlockSize;
+    PartitionInfo->Bytes = NewBytes;
   }
 
   if (PseudoDeviceInfo->MmDeviceInfo != NULL) {
