@@ -317,6 +317,8 @@ InstallDramWithCarveouts (
   IN  UINTN                     CarveoutRegionsCount,
   IN  NVDA_MEMORY_REGION        *UsableCarveoutRegions,
   IN  UINTN                     UsableCarveoutRegionsCount,
+  IN  NVDA_MEMORY_REGION        *ReclaimableCarveoutRegions,
+  IN  UINTN                     ReclaimableCarveoutRegionsCount,
   OUT UINTN                     *FinalRegionsCount,
   OUT EFI_PHYSICAL_ADDRESS      *MaxRegionStart,
   OUT UINTN                     *MaxRegionSize
@@ -326,11 +328,12 @@ InstallDramWithCarveouts (
   NVDA_MEMORY_REGION           *LargestRegions = NULL;
   NVDA_MEMORY_REGION           Region;
   NVDA_MEMORY_REGION           LargestUefiRegion;
-  UINTN                        DramIndex           = 0;
-  UINTN                        CarveoutIndex       = 0;
-  UINTN                        UsableCarveoutIndex = 0;
-  UINTN                        InstalledRegions    = 0;
-  UINTN                        ReservedRegions     = 0;
+  UINTN                        DramIndex                = 0;
+  UINTN                        CarveoutIndex            = 0;
+  UINTN                        UsableCarveoutIndex      = 0;
+  UINTN                        ReclaimableCarveoutIndex = 0;
+  UINTN                        InstalledRegions         = 0;
+  UINTN                        ReservedRegions          = 0;
   EFI_RESOURCE_ATTRIBUTE_TYPE  ResourceAttributes;
   EFI_RESOURCE_ATTRIBUTE_TYPE  ReservedResourceAttributes;
   EFI_PHYSICAL_ADDRESS         CarveoutStart;
@@ -341,20 +344,30 @@ InstallDramWithCarveouts (
   EFI_PHYSICAL_ADDRESS         UefiMemoryEnd;
   UINTN                        ListIndex;
 
-  if (UsableCarveoutRegionsCount >= MAX_USABLE_REGIONS) {
+  //
+  // Usable and reclaimable carveouts each emit one resource descriptor, so both
+  // must be counted against the region budget reserved for later UEFI-added
+  // regions (MAX_USABLE_REGIONS).
+  //
+  if ((UsableCarveoutRegionsCount >= MAX_USABLE_REGIONS) ||
+      (ReclaimableCarveoutRegionsCount >= MAX_USABLE_REGIONS) ||
+      ((UsableCarveoutRegionsCount + ReclaimableCarveoutRegionsCount + 1) >= MAX_USABLE_REGIONS))
+  {
     DEBUG ((
       DEBUG_ERROR,
-      "%a: too many usable carveouts: %lu\n",
+      "%a: too many usable/reclaimable carveouts: %lu + %lu\n",
       __FUNCTION__,
-      UsableCarveoutRegionsCount
+      UsableCarveoutRegionsCount,
+      ReclaimableCarveoutRegionsCount
       ));
     return EFI_DEVICE_ERROR;
   }
 
-  MaxGeneralRegions = MAX_USABLE_REGIONS - UsableCarveoutRegionsCount - 1;
-  UefiMemoryBase    = InputDramRegions[UefiDramRegionIndex].MemoryBaseAddress;
-  UefiMemoryEnd     = UefiMemoryBase +
-                      InputDramRegions[UefiDramRegionIndex].MemoryLength;
+  MaxGeneralRegions = MAX_USABLE_REGIONS - UsableCarveoutRegionsCount -
+                      ReclaimableCarveoutRegionsCount - 1;
+  UefiMemoryBase = InputDramRegions[UefiDramRegionIndex].MemoryBaseAddress;
+  UefiMemoryEnd  = UefiMemoryBase +
+                   InputDramRegions[UefiDramRegionIndex].MemoryLength;
 
   // InputDramRegions is CONST, so we need a sortable copy
   DramRegions = AllocatePool (sizeof (NVDA_MEMORY_REGION) * DramRegionsCount);
@@ -362,7 +375,15 @@ InstallDramWithCarveouts (
   CopyMem (DramRegions, InputDramRegions, sizeof (NVDA_MEMORY_REGION) * DramRegionsCount);
 
   LargestRegions = AllocatePool (sizeof (NVDA_MEMORY_REGION) * MAX_USABLE_REGIONS);
-  NV_ASSERT_RETURN (LargestRegions != NULL, return EFI_DEVICE_ERROR, "%a: Unable to allocate space for the %d largest regions\n", __FUNCTION__, MAX_USABLE_REGIONS);
+  NV_ASSERT_RETURN (
+    LargestRegions != NULL,
+    { FreePool (DramRegions);
+      return EFI_DEVICE_ERROR;
+    },
+    "%a: Unable to allocate space for the %d largest regions\n",
+    __FUNCTION__,
+    MAX_USABLE_REGIONS
+    );
 
   MemoryRegionSort (DramRegions, DramRegionsCount, CompareRegionAddressLowToHigh);
   for (DramIndex = 0; DramIndex < DramRegionsCount; DramIndex++) {
@@ -530,6 +551,56 @@ InstallDramWithCarveouts (
       ReservedResourceAttributes,
       UsableCarveoutRegions[UsableCarveoutIndex].MemoryBaseAddress,
       UsableCarveoutRegions[UsableCarveoutIndex].MemoryLength
+      );
+    ReservedRegions++;
+  }
+
+  //
+  // Publish reclaimable carveouts as system memory the OS reclaims after
+  // ExitBootServices, rather than reserving them for the life of the OS. Like
+  // the usable carveouts above they stay carved out of general DRAM (so UEFI
+  // never migrates its HOB list or working memory into them while the firmware
+  // volume, DTB and boot stack still live there), but a boot-services
+  // allocation HOB keeps each one in use for the duration of boot so DXE does
+  // not hand it out. Each emits exactly one resource descriptor, so the
+  // caller's resource accounting stays balanced.
+  //
+  for (ReclaimableCarveoutIndex = 0;
+       ReclaimableCarveoutIndex < ReclaimableCarveoutRegionsCount;
+       ReclaimableCarveoutIndex++)
+  {
+    UINT64  RoundedLength;
+
+    if (ReclaimableCarveoutRegions[ReclaimableCarveoutIndex].MemoryLength == 0) {
+      continue;
+    }
+
+    //
+    // Round the length up to a whole number of pages once and use it for both
+    // HOBs, so the boot-services allocation HOB never extends past the resource
+    // descriptor HOB (PI spec Vol 3, the allocation must stay within the
+    // resource). Lengths are already 64KiB-aligned by AlignCarveoutRegions64KiB,
+    // so this is a no-op today, but it keeps the two HOBs consistent regardless.
+    //
+    RoundedLength = EFI_PAGES_TO_SIZE (EFI_SIZE_TO_PAGES (ReclaimableCarveoutRegions[ReclaimableCarveoutIndex].MemoryLength));
+
+    DEBUG ((
+      DEBUG_ERROR,
+      "%a: Reclaimable carveout: Base: 0x%016lx, Size: 0x%016lx\n",
+      __FUNCTION__,
+      ReclaimableCarveoutRegions[ReclaimableCarveoutIndex].MemoryBaseAddress,
+      ReclaimableCarveoutRegions[ReclaimableCarveoutIndex].MemoryLength
+      ));
+    BuildResourceDescriptorHob (
+      EFI_RESOURCE_SYSTEM_MEMORY,
+      ResourceAttributes,
+      ReclaimableCarveoutRegions[ReclaimableCarveoutIndex].MemoryBaseAddress,
+      RoundedLength
+      );
+    BuildMemoryAllocationHob (
+      ReclaimableCarveoutRegions[ReclaimableCarveoutIndex].MemoryBaseAddress,
+      RoundedLength,
+      EfiBootServicesData
       );
     ReservedRegions++;
   }

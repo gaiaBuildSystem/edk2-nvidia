@@ -52,6 +52,8 @@ InstallDramWithCarveouts (
   IN  UINTN                     CarveoutRegionsCount,
   IN  NVDA_MEMORY_REGION        *UsableCarveoutRegions,
   IN  UINTN                     UsableCarveoutRegionsCount,
+  IN  NVDA_MEMORY_REGION        *ReclaimableCarveoutRegions,
+  IN  UINTN                     ReclaimableCarveoutRegionsCount,
   OUT UINTN                     *FinalRegionsCount,
   OUT EFI_PHYSICAL_ADDRESS      *MaxRegionStart,
   OUT UINTN                     *MaxRegionSize

@@ -173,6 +173,8 @@ T234AddBootloaderCarveouts (
   IN OUT UINTN                       *CONST  RegionCount,
   IN     NVDA_MEMORY_REGION          *CONST  UsableRegions,
   IN OUT UINTN                       *CONST  UsableRegionCount,
+  IN     NVDA_MEMORY_REGION          *CONST  ReclaimableRegions,
+  IN OUT UINTN                       *CONST  ReclaimableRegionCount,
   IN     CONST BOOLEAN                       BlanketDramEnabled,
   IN     CONST TEGRABL_CARVEOUT_INFO *CONST  Carveouts,
   IN     CONST UINTN                         CarveoutCount
@@ -227,7 +229,17 @@ T234AddBootloaderCarveouts (
         break;
 
       case CARVEOUT_UEFI:
-        PlatformResourceAddMemoryRegion (UsableRegions, UsableRegionCount, Base, Size);
+        // Firmware-owned carveout. When PcdUefiCarveoutOsReclaimable is set,
+        // route it to the reclaimable list so DramCarveoutLib publishes it to
+        // the OS as boot-services (reclaimable) system memory; otherwise keep it
+        // reserved. Either way it stays carved out of general DRAM below, so
+        // UEFI never uses it for its own working memory.
+        if (FixedPcdGetBool (PcdUefiCarveoutOsReclaimable)) {
+          PlatformResourceAddMemoryRegion (ReclaimableRegions, ReclaimableRegionCount, Base, Size);
+        } else {
+          PlatformResourceAddMemoryRegion (UsableRegions, UsableRegionCount, Base, Size);
+        }
+
         break;
 
       case CARVEOUT_BLANKET_NSDRAM:
@@ -260,6 +272,8 @@ T234AddBootloaderCarveouts (
    @param[out] CarveoutRegionCount        Number of carveout regions in the list.
    @param[out] UsableCarveoutRegions      The list of usable carveout regions.
    @param[out] UsableCarveoutRegionCount  Number of usable carveout regions in the list.
+   @param[out] ReclaimableCarveoutRegions      The list of OS-reclaimable carveout regions.
+   @param[out] ReclaimableCarveoutRegionCount  Number of OS-reclaimable carveout regions.
 
    @retval EFI_SUCCESS    The list was built successfully.
    @retval !=EFI_SUCCESS  Errors occurred.
@@ -271,20 +285,24 @@ T234BuildCarveoutRegions (
   OUT NVDA_MEMORY_REGION      **CONST  CarveoutRegions,
   OUT UINTN                    *CONST  CarveoutRegionCount,
   OUT NVDA_MEMORY_REGION      **CONST  UsableCarveoutRegions,
-  OUT UINTN                    *CONST  UsableCarveoutRegionCount
+  OUT UINTN                    *CONST  UsableCarveoutRegionCount,
+  OUT NVDA_MEMORY_REGION      **CONST  ReclaimableCarveoutRegions,
+  OUT UINTN                    *CONST  ReclaimableCarveoutRegionCount
   )
 {
   NVDA_MEMORY_REGION  *Regions;
   UINTN               RegionCount, RegionCountMax;
   NVDA_MEMORY_REGION  *UsableRegions;
   UINTN               UsableRegionCount, UsableRegionCountMax;
+  NVDA_MEMORY_REGION  *ReclaimableRegions;
+  UINTN               ReclaimableRegionCount, ReclaimableRegionCountMax;
 
   CONST BOOLEAN  BlanketDramEnabled =
     CPUBL_PARAMS (CpuBootloaderParams, FeatureFlagData.EnableBlanketNsdramCarveout);
   CONST BOOLEAN  DramPageRetirementEnabled =
     CPUBL_PARAMS (CpuBootloaderParams, FeatureFlagData.EnableDramPageRetirement);
 
-  RegionCountMax = UsableRegionCountMax = CARVEOUT_OEM_COUNT;
+  RegionCountMax = UsableRegionCountMax = ReclaimableRegionCountMax = CARVEOUT_OEM_COUNT;
   if (DramPageRetirementEnabled) {
     RegionCountMax += NUM_DRAM_BAD_PAGES;
   }
@@ -301,19 +319,35 @@ T234BuildCarveoutRegions (
   UsableRegions = (NVDA_MEMORY_REGION *)AllocatePool (UsableRegionCountMax * sizeof (*UsableRegions));
   NV_ASSERT_RETURN (
     UsableRegions != NULL,
-    return EFI_DEVICE_ERROR,
+    { FreePool (Regions);
+      return EFI_DEVICE_ERROR;
+    },
     "%a: Failed to allocate %lu usable carveout regions\r\n",
     __FUNCTION__,
     (UINT64)UsableRegionCountMax
     );
 
-  RegionCount = UsableRegionCount = 0;
+  ReclaimableRegions = (NVDA_MEMORY_REGION *)AllocatePool (ReclaimableRegionCountMax * sizeof (*ReclaimableRegions));
+  NV_ASSERT_RETURN (
+    ReclaimableRegions != NULL,
+    { FreePool (Regions);
+      FreePool (UsableRegions);
+      return EFI_DEVICE_ERROR;
+    },
+    "%a: Failed to allocate %lu reclaimable carveout regions\r\n",
+    __FUNCTION__,
+    (UINT64)ReclaimableRegionCountMax
+    );
+
+  RegionCount = UsableRegionCount = ReclaimableRegionCount = 0;
 
   T234AddBootloaderCarveouts (
     Regions,
     &RegionCount,
     UsableRegions,
     &UsableRegionCount,
+    ReclaimableRegions,
+    &ReclaimableRegionCount,
     BlanketDramEnabled,
     CPUBL_PARAMS (CpuBootloaderParams, CarveoutInfo),
     CARVEOUT_OEM_COUNT
@@ -329,10 +363,12 @@ T234BuildCarveoutRegions (
       );
   }
 
-  *CarveoutRegions           = Regions;
-  *CarveoutRegionCount       = RegionCount;
-  *UsableCarveoutRegions     = UsableRegions;
-  *UsableCarveoutRegionCount = UsableRegionCount;
+  *CarveoutRegions                = Regions;
+  *CarveoutRegionCount            = RegionCount;
+  *UsableCarveoutRegions          = UsableRegions;
+  *UsableCarveoutRegionCount      = UsableRegionCount;
+  *ReclaimableCarveoutRegions     = ReclaimableRegions;
+  *ReclaimableCarveoutRegionCount = ReclaimableRegionCount;
   return EFI_SUCCESS;
 }
 
@@ -358,6 +394,8 @@ T234GetResourceConfig (
   EFI_STATUS          Status;
   NVDA_MEMORY_REGION  *DramRegions, *CarveoutRegions, *UsableCarveoutRegions;
   UINTN               DramRegionCount, CarveoutRegionCount, UsableCarveoutRegionCount;
+  NVDA_MEMORY_REGION  *ReclaimableCarveoutRegions;
+  UINTN               ReclaimableCarveoutRegionCount;
 
   TEGRA_CPUBL_PARAMS *CONST  CpuBootloaderParams =
     (TEGRA_CPUBL_PARAMS *)(VOID *)CpuBootloaderAddress;
@@ -376,20 +414,25 @@ T234GetResourceConfig (
              &CarveoutRegions,
              &CarveoutRegionCount,
              &UsableCarveoutRegions,
-             &UsableCarveoutRegionCount
+             &UsableCarveoutRegionCount,
+             &ReclaimableCarveoutRegions,
+             &ReclaimableCarveoutRegionCount
              );
   if (EFI_ERROR (Status)) {
+    FreePool (DramRegions);
     return Status;
   }
 
-  PlatformInfo->DtbLoadAddress             = GetDTBBaseAddress ();
-  PlatformInfo->DramRegions                = DramRegions;
-  PlatformInfo->DramRegionsCount           = DramRegionCount;
-  PlatformInfo->UefiDramRegionIndex        = 0;
-  PlatformInfo->CarveoutRegions            = CarveoutRegions;
-  PlatformInfo->CarveoutRegionsCount       = CarveoutRegionCount;
-  PlatformInfo->UsableCarveoutRegions      = UsableCarveoutRegions;
-  PlatformInfo->UsableCarveoutRegionsCount = UsableCarveoutRegionCount;
+  PlatformInfo->DtbLoadAddress                  = GetDTBBaseAddress ();
+  PlatformInfo->DramRegions                     = DramRegions;
+  PlatformInfo->DramRegionsCount                = DramRegionCount;
+  PlatformInfo->UefiDramRegionIndex             = 0;
+  PlatformInfo->CarveoutRegions                 = CarveoutRegions;
+  PlatformInfo->CarveoutRegionsCount            = CarveoutRegionCount;
+  PlatformInfo->UsableCarveoutRegions           = UsableCarveoutRegions;
+  PlatformInfo->UsableCarveoutRegionsCount      = UsableCarveoutRegionCount;
+  PlatformInfo->ReclaimableCarveoutRegions      = ReclaimableCarveoutRegions;
+  PlatformInfo->ReclaimableCarveoutRegionsCount = ReclaimableCarveoutRegionCount;
 
   return EFI_SUCCESS;
 }

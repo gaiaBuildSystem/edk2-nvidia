@@ -240,6 +240,7 @@ InstallSystemResources (
 
   AlignCarveoutRegions64KiB (PlatformInfo->CarveoutRegions, PlatformInfo->CarveoutRegionsCount);
   AlignCarveoutRegions64KiB (PlatformInfo->UsableCarveoutRegions, PlatformInfo->UsableCarveoutRegionsCount);
+  AlignCarveoutRegions64KiB (PlatformInfo->ReclaimableCarveoutRegions, PlatformInfo->ReclaimableCarveoutRegionsCount);
 
   FinalDramRegionsCount = 0;
   Status                = InstallDramWithCarveouts (
@@ -250,6 +251,8 @@ InstallSystemResources (
                             PlatformInfo->CarveoutRegionsCount,
                             PlatformInfo->UsableCarveoutRegions,
                             PlatformInfo->UsableCarveoutRegionsCount,
+                            PlatformInfo->ReclaimableCarveoutRegions,
+                            PlatformInfo->ReclaimableCarveoutRegionsCount,
                             &FinalDramRegionsCount,
                             MaxRegionStart,
                             MaxRegionSize

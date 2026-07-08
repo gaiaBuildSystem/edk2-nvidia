@@ -394,6 +394,9 @@
 # Expose CCPLEX_INTERWORLD_SHMEM Carveout To OS
   gNVIDIATokenSpaceGuid.PcdExposeCcplexInterworldShmem|FALSE|BOOLEAN|0x0000003D
 
+# Expose the UEFI carveout to the OS as reclaimable memory (BootServicesData) instead of reserved
+  gNVIDIATokenSpaceGuid.PcdUefiCarveoutOsReclaimable|FALSE|BOOLEAN|0x0001006c
+
 # Tegra Boot Chain Selection Register Address T234
   gNVIDIATokenSpaceGuid.PcdBootChainRegisterBaseAddressT234|0x0C3903CC|UINT64|0x0000003E
 

@@ -1,6 +1,6 @@
 /** @file
 *
-*  SPDX-FileCopyrightText: Copyright (c) 2020-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+*  SPDX-FileCopyrightText: Copyright (c) 2020-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 *
 *  SPDX-License-Identifier: BSD-2-Clause-Patent
 *
@@ -58,6 +58,14 @@ typedef struct {
   UINTN                 CarveoutRegionsCount;
   NVDA_MEMORY_REGION    *UsableCarveoutRegions;
   UINTN                 UsableCarveoutRegionsCount;
+  //
+  // Carveouts published to the OS as reclaimable system memory (allocated as
+  // boot-services data during boot) instead of as reserved regions. Like the
+  // usable carveouts they stay carved out of general DRAM, but the OS reclaims
+  // them after ExitBootServices. Add entries here to expose more carveouts.
+  //
+  NVDA_MEMORY_REGION    *ReclaimableCarveoutRegions;
+  UINTN                 ReclaimableCarveoutRegionsCount;
   UINTN                 DtbLoadAddress;
   NVDA_MEMORY_REGION    RamOopsRegion;
   NVDA_MEMORY_REGION    *BpmpIpcRegions;

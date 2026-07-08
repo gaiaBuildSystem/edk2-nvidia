@@ -955,6 +955,7 @@ CONFIG_FMP_CERTIFICATES_DTB_MAX_SIZE=0
   #Option to boot android image
 !ifdef CONFIG_BUILD_ANDROID
   gNVIDIATokenSpaceGuid.PcdBootAndroidImage|TRUE
+  gNVIDIATokenSpaceGuid.PcdUefiCarveoutOsReclaimable|TRUE
 !endif
 
   #
