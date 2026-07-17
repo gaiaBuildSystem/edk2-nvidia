@@ -1485,16 +1485,6 @@ GetAgxOrinCapsuleFileName (
   }
 
   BoardSku = mTegraPlatformCompatSpec.mBoardSku;
-  Status   = ParseAsciiUint32Field (
-               mTegraPlatformCompatSpec.mBoardFab,
-               AsciiStrLen (mTegraPlatformCompatSpec.mBoardFab),
-               &BoardFab
-               );
-  if (EFI_ERROR (Status)) {
-    PreIsoLogPrint (L"%a: Failed to parse cached TegraPlatformCompatSpec BoardFab: %r, using default %s\r\n", __FUNCTION__, Status, CAPSULE_DEFAULT_NAME);
-    return CAPSULE_DEFAULT_NAME;
-  }
-
   if ((BoardSku == 4) || (BoardSku == 5)) {
     return CAPSULE_3701_AGX;
   }
@@ -1504,6 +1494,16 @@ GetAgxOrinCapsuleFileName (
   }
 
   if (BoardSku == 0) {
+    Status = ParseAsciiUint32Field (
+               mTegraPlatformCompatSpec.mBoardFab,
+               AsciiStrLen (mTegraPlatformCompatSpec.mBoardFab),
+               &BoardFab
+               );
+    if (EFI_ERROR (Status)) {
+      PreIsoLogPrint (L"%a: Failed to parse cached TegraPlatformCompatSpec BoardFab: %r, using default %s\r\n", __FUNCTION__, Status, CAPSULE_3701_AGX);
+      return CAPSULE_3701_AGX;
+    }
+
     if (BoardFab == 300) {
       return CAPSULE_3701_AGX;
     }
@@ -1511,8 +1511,8 @@ GetAgxOrinCapsuleFileName (
     return CAPSULE_3701_000;
   }
 
-  PreIsoLogPrint (L"%a: Unknown SKU %d for board 3701, using default\r\n", __FUNCTION__, BoardSku);
-  return CAPSULE_DEFAULT_NAME;
+  PreIsoLogPrint (L"%a: Unknown SKU %d for board 3701, using default %s\r\n", __FUNCTION__, BoardSku, CAPSULE_3701_AGX);
+  return CAPSULE_3701_AGX;
 }
 
 /**
