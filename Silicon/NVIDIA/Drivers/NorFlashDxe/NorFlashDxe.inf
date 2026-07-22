@@ -18,6 +18,7 @@
   ENTRY_POINT                    = InitializeNorFlashDxe
 
 [Sources.common]
+  NorFlashCommon.c
   NorFlashDxe.c
 
 [Packages]

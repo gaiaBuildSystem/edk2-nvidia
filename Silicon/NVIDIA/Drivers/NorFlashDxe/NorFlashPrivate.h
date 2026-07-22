@@ -47,11 +47,14 @@
 #define NOR_CMD_SIZE   1
 #define NOR_ADDR_SIZE  4
 
-#define NOR_WRITE_DATA_CMD      0x12
-#define NOR_FAST_READ_DATA_CMD  0x0C
-#define NOR_READ_DATA_CMD       0x13
-#define NOR_WREN_DISABLE        0x4
-#define NOR_WREN_ENABLE         0x6
+#define NOR_WRITE_DATA_CMD         0x12
+#define NOR_FAST_READ_DATA_CMD     0x0C
+#define NOR_READ_DATA_CMD          0x13
+#define NOR_WRITE_DATA_CMD_3B      0x02
+#define NOR_FAST_READ_DATA_CMD_3B  0x0B
+#define NOR_READ_DATA_CMD_3B       0x03
+#define NOR_WREN_DISABLE           0x4
+#define NOR_WREN_ENABLE            0x6
 
 #define NOR_READ_SFDP_CMD             0x5A
 #define NOR_SFDP_ADDR_SIZE            3
@@ -224,6 +227,7 @@ typedef struct {
   UINT64                  HybridMemoryDensity;
   UINT32                  HybridBlockSize;
   BOOLEAN                 FastReadSupport;
+  UINT8                   AddrSize;
 } NOR_FLASH_PRIVATE_ATTRIBUTES;
 
 typedef struct {
@@ -278,5 +282,99 @@ typedef struct {
 #define NOR_FLASH_PRIVATE_DATA_FROM_NOR_FLASH_PROTOCOL(a)    CR(a, NOR_FLASH_PRIVATE_DATA, NorFlashProtocol, NOR_FLASH_SIGNATURE)
 #define NOR_FLASH_PRIVATE_DATA_FROM_BLOCK_IO_PROTOCOL(a)     CR(a, NOR_FLASH_PRIVATE_DATA, BlockIoProtocol, NOR_FLASH_SIGNATURE)
 #define NOR_FLASH_PRIVATE_DATA_FROM_ERASE_BLOCK_PROTOCOL(a)  CR(a, NOR_FLASH_PRIVATE_DATA, EraseBlockProtocol, NOR_FLASH_SIGNATURE)
+
+// Prototypes for functions defined in NorFlashCommon.c
+EFI_STATUS
+ReadNorFlashRegister (
+  IN  NOR_FLASH_PRIVATE_DATA  *Private,
+  IN  UINT8                   *Cmd,
+  IN  UINT32                  CmdSize,
+  OUT UINT8                   *Resp
+  );
+
+EFI_STATUS
+WaitNorFlashWriteComplete (
+  IN NOR_FLASH_PRIVATE_DATA  *Private
+  );
+
+EFI_STATUS
+ConfigureNorFlashWriteEnLatch (
+  IN NOR_FLASH_PRIVATE_DATA  *Private,
+  IN BOOLEAN                 Enable
+  );
+
+EFI_STATUS
+ReadNorFlashSFDP (
+  IN NOR_FLASH_PRIVATE_DATA  *Private
+  );
+
+EFI_STATUS
+EFIAPI
+NorFlashGetAttributes (
+  IN  NVIDIA_NOR_FLASH_PROTOCOL  *This,
+  OUT NOR_FLASH_ATTRIBUTES       *Attributes
+  );
+
+EFI_STATUS
+EFIAPI
+NorFlashRead (
+  IN NVIDIA_NOR_FLASH_PROTOCOL  *This,
+  IN UINT32                     Offset,
+  IN UINT32                     Size,
+  IN VOID                       *Buffer
+  );
+
+EFI_STATUS
+EFIAPI
+NorFlashReadBlock (
+  IN EFI_BLOCK_IO_PROTOCOL  *This,
+  IN UINT32                 MediaId,
+  IN EFI_LBA                Lba,
+  IN UINTN                  BufferSize,
+  IN VOID                   *Buffer
+  );
+
+EFI_STATUS
+NorFlashErase (
+  IN NVIDIA_NOR_FLASH_PROTOCOL  *This,
+  IN UINT32                     Lba,
+  IN UINT32                     NumLba,
+  IN BOOLEAN                    Hybrid
+  );
+
+EFI_STATUS
+EFIAPI
+NorFlashUniformErase (
+  IN NVIDIA_NOR_FLASH_PROTOCOL  *This,
+  IN UINT32                     Lba,
+  IN UINT32                     NumLba
+  );
+
+EFI_STATUS
+NorFlashWriteSinglePage (
+  IN NVIDIA_NOR_FLASH_PROTOCOL  *This,
+  IN UINT32                     Offset,
+  IN UINT32                     Size,
+  IN VOID                       *Buffer
+  );
+
+EFI_STATUS
+EFIAPI
+NorFlashWrite (
+  IN NVIDIA_NOR_FLASH_PROTOCOL  *This,
+  IN UINT32                     Offset,
+  IN UINT32                     Size,
+  IN VOID                       *Buffer
+  );
+
+EFI_STATUS
+EFIAPI
+NorFlashWriteBlock (
+  IN EFI_BLOCK_IO_PROTOCOL  *This,
+  IN UINT32                 MediaId,
+  IN EFI_LBA                Lba,
+  IN UINTN                  BufferSize,
+  IN VOID                   *Buffer
+  );
 
 #endif
