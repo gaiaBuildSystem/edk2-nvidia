@@ -20,9 +20,6 @@ _msg "Activating Python virtual environment."
 find_venv_activate
 . ${VENV_ACTIVATE}
 
-# Ensure we're using the pip from the virtual environment
-export PATH="venv/bin:$PATH"
-
 STUART_BUILD_OPTIONS=${STUART_BUILD_OPTIONS:---verbose}
 
 if [[ "${UEFI_SKIP_UPDATE}" ]]; then

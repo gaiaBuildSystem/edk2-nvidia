@@ -26,16 +26,12 @@ if [[ -z "${UEFI_SKIP_VENV}" ]]; then
   find_venv_activate
   if [ ! -e ${VENV_ACTIVATE} ]; then
     _msg "Creating Python virtual environment in `pwd`/venv..."
-    # Use python3 -m venv instead of virtualenv for better compatibility
-    python3 -m venv venv
+    virtualenv -p python3 venv
     find_venv_activate
     . ${VENV_ACTIVATE}
     _msg "Installing required Python packages..."
-    # Upgrade pip first to ensure we have latest version
-    pip install --upgrade pip
-    # Force installation in the virtual environment to avoid system conflicts
-    pip install --force-reinstall ${UEFI_PIP_INSTALL_ARGS} --upgrade -r edk2/pip-requirements.txt
-    pip install --force-reinstall ${UEFI_PIP_INSTALL_ARGS} --upgrade kconfiglib
+    pip install ${UEFI_PIP_INSTALL_ARGS} --upgrade -r edk2/pip-requirements.txt
+    pip install ${UEFI_PIP_INSTALL_ARGS} --upgrade kconfiglib
   else
     _msg "Activating Python virtual environment."
     find_venv_activate
