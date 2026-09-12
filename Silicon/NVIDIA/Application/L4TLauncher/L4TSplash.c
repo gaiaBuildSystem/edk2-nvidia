@@ -49,20 +49,43 @@ SplashClearScreen (
   IN EFI_GRAPHICS_OUTPUT_PROTOCOL  *Gop
   )
 {
-  EFI_GRAPHICS_OUTPUT_BLT_PIXEL  BlackPixel = { 0, 0, 0, 0 };
+  EFI_STATUS                     Status;
+  UINTN                          ScreenWidth;
+  UINTN                          ScreenHeight;
+  UINTN                          BufferSize;
+  EFI_GRAPHICS_OUTPUT_BLT_PIXEL  *BlackBuffer;
 
-  return Gop->Blt (
+  ScreenWidth  = Gop->Mode->Info->HorizontalResolution;
+  ScreenHeight = Gop->Mode->Info->VerticalResolution;
+  BufferSize   = ScreenWidth * ScreenHeight * sizeof (EFI_GRAPHICS_OUTPUT_BLT_PIXEL);
+
+  //
+  // Some GOP implementations do not honor the EfiBltVideoToVideo constant-fill
+  // idiom, so build an explicit black frame buffer and push it with
+  // EfiBltBufferToVideo, which every compliant driver must implement.
+  // All-zero pixels are black in any pixel format.
+  //
+  BlackBuffer = AllocateZeroPool (BufferSize);
+  if (BlackBuffer == NULL) {
+    return EFI_OUT_OF_RESOURCES;
+  }
+
+  Status = Gop->Blt (
               Gop,
-              &BlackPixel,
-              EfiBltConstantFill,
+              BlackBuffer,
+              EfiBltBufferToVideo,
               0,
               0,
               0,
               0,
-              Gop->Mode->Info->HorizontalResolution,
-              Gop->Mode->Info->VerticalResolution,
-              NULL
+              ScreenWidth,
+              ScreenHeight,
+              ScreenWidth * sizeof (EFI_GRAPHICS_OUTPUT_BLT_PIXEL)
               );
+
+  FreePool (BlackBuffer);
+
+  return Status;
 }
 
 /**
