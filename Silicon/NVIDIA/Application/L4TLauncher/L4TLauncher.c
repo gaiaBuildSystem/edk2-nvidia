@@ -2778,6 +2778,13 @@ L4TLauncher (
   UINTN                      ExtLinuxBootOption;
   UINTN                      Index;
 
+  //
+  // Show the splash screen as early as possible: clear the display to black
+  // and draw the launcher logo so it is visible while boot processing runs.
+  // Best-effort only, never blocks boot.
+  //
+  (VOID) ShowL4TSplashScreen (ImageHandle);
+
   Status = gBS->HandleProtocol (ImageHandle, &gEfiLoadedImageProtocolGuid, (VOID **)&LoadedImage);
   if (EFI_ERROR (Status)) {
     ErrorPrint (L"%a: Unable to locate loaded image: %r\r\n", __FUNCTION__, Status);

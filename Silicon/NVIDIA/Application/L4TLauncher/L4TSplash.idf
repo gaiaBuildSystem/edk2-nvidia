@@ -1,0 +1,9 @@
+// /** @file
+// L4T Launcher splash screen image definition file.
+//
+// SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// SPDX-License-Identifier: BSD-2-Clause-Patent
+//
+// **/
+
+#image IMG_L4T_LOGO nvidiagray1080.bmp

@@ -77,4 +77,18 @@ typedef struct {
 
 extern L4T_LAUNCHER_SUPPORT_PROTOCOL  *gL4TSupportProtocol;
 
+/**
+  Show the splash screen: clear the display to black and draw the embedded
+  launcher logo centered on the screen. Best-effort only, never blocks boot.
+
+  @param[in] ImageHandle  The firmware allocated handle for this image.
+
+  @retval EFI_SUCCESS  Always, unless a parameter is invalid.
+**/
+EFI_STATUS
+EFIAPI
+ShowL4TSplashScreen (
+  IN EFI_HANDLE  ImageHandle
+  );
+
 #endif /* __L4T_LAUNCHER_H_ */

@@ -15,13 +15,20 @@
   VERSION_STRING                 = 1.0
   ENTRY_POINT                    = L4TLauncher
   MODULE_UNI_FILE                = L4TLauncher.uni
-
+#
+#  This flag specifies whether HII resource section is generated into PE image.
+#  Required for the embedded splash screen logo (L4TSplash.idf).
+#
+  UEFI_HII_RESOURCE_SECTION      = TRUE
 
 [Sources]
   L4TLauncher.c
   L4TRootfsValidation.c
   L4TOpteeDecrypt.c
   L4TPreIsoInstaller.c
+  L4TSplash.c
+  L4TSplash.idf
+  nvidiagray1080.bmp
 
 [Packages]
   EmbeddedPkg/EmbeddedPkg.dec
@@ -47,6 +54,7 @@
   AndroidBootImgLib
   SecureBootVariableLib
   OpteeNvLib
+  ImageScaleLib
 
 [Guids]
   gNVIDIAPublicVariableGuid
@@ -70,6 +78,13 @@
   gNVIDIACvmEepromProtocolGuid
   gEfiHash2ServiceBindingProtocolGuid   ## CONSUMES
   gEfiHash2ProtocolGuid                 ## CONSUMES
+  #
+  # Splash screen support (L4TSplash.c)
+  #
+  gEfiGraphicsOutputProtocolGuid        ## CONSUMES
+  gEfiHiiDatabaseProtocolGuid           ## CONSUMES
+  gEfiHiiImageExProtocolGuid            ## CONSUMES
+  gEfiHiiPackageListProtocolGuid        ## PRODUCES
 
 [UserExtensions.TianoCore."ExtraFiles"]
   L4TLauncherExtra.uni
