@@ -21,10 +21,13 @@
 #include <Protocol/HiiDatabase.h>
 #include <Protocol/HiiImageEx.h>
 #include <Protocol/HiiPackageList.h>
+#include <Protocol/SimpleTextOut.h>
+#include <Protocol/DevicePath.h>
 #include <Library/BaseMemoryLib.h>
 #include <Library/UefiBootServicesTableLib.h>
 #include <Library/DebugLib.h>
 #include <Library/MemoryAllocationLib.h>
+#include <Library/DevicePathLib.h>
 #include <Library/ImageScaleLib.h>
 
 //
@@ -89,6 +92,177 @@ SplashClearScreen (
 }
 
 /**
+  Compare two device paths node by node starting at the given nodes.
+
+  @param[in] Dp1  First device path (or node within it).
+  @param[in] Dp2  Second device path (or node within it).
+
+  @retval  TRUE   The remaining paths are identical, including end nodes.
+  @retval  FALSE  They differ or have different lengths.
+**/
+STATIC
+BOOLEAN
+SameDevicePathFrom (
+  IN EFI_DEVICE_PATH_PROTOCOL  *Dp1,
+  IN EFI_DEVICE_PATH_PROTOCOL  *Dp2
+  )
+{
+  while (!IsDevicePathEnd (Dp1) && !IsDevicePathEnd (Dp2)) {
+    UINTN  Size1;
+    UINTN  Size2;
+
+    Size1 = Dp1->Length[0] | ((UINTN)Dp1->Length[1] << 8);
+    Size2 = Dp2->Length[0] | ((UINTN)Dp2->Length[1] << 8);
+    if ((Size1 != Size2) || (CompareMem (Dp1, Dp2, Size1) != 0)) {
+      return FALSE;
+    }
+
+    Dp1 = NextDevicePathNode (Dp1);
+    Dp2 = NextDevicePathNode (Dp2);
+  }
+
+  return IsDevicePathEnd (Dp1) && IsDevicePathEnd (Dp2);
+}
+
+/**
+  Check whether a text console device path belongs to any Graphics Output
+  device (exact match or suffix). The video text console installed by the
+  graphics console driver reuses its parent GOP device's device path, so this
+  identifies it without relying on private driver data.
+
+  @param[in] TextDp  Device path of a handle that produces Simple Text Out.
+
+  @retval  TRUE   TextDp matches a GOP device path.
+  @retval  FALSE  No match (or no comparable GOP paths available).
+**/
+STATIC
+BOOLEAN
+IsVideoTextConsole (
+  IN EFI_DEVICE_PATH_PROTOCOL  *TextDp
+  )
+{
+  EFI_STATUS             Status;
+  EFI_HANDLE             *GopHandles;
+  UINTN                  GopCount;
+  UINTN                  Index;
+
+  GopHandles = NULL;
+  GopCount   = 0;
+  Status = gBS->LocateHandleBuffer (
+                  ByProtocol,
+                  &gEfiGraphicsOutputProtocolGuid,
+                  NULL,
+                  &GopCount,
+                  &GopHandles
+                  );
+  if (EFI_ERROR (Status) || (GopCount == 0) || (GopHandles == NULL)) {
+    return FALSE;
+  }
+
+  for (Index = 0; Index < GopCount; Index++) {
+    EFI_DEVICE_PATH_PROTOCOL  *GopDp;
+    EFI_DEVICE_PATH_PROTOCOL  *Node;
+
+    Status = gBS->HandleProtocol (GopHandles[Index], &gEfiDevicePathProtocolGuid, (VOID **)&GopDp);
+    if (EFI_ERROR (Status) || (GopDp == NULL)) {
+      continue;
+    }
+
+    //
+    // Match on the full path or any suffix of it.
+    //
+    for (Node = GopDp; !IsDevicePathEnd (Node); Node = NextDevicePathNode (Node)) {
+      if (SameDevicePathFrom (Node, TextDp)) {
+        FreePool (GopHandles);
+        return TRUE;
+      }
+    }
+  }
+
+  FreePool (GopHandles);
+  return FALSE;
+}
+
+/**
+  Remove video-based text consoles from ConOut so that debug output no longer
+  overwrites the splash screen; serial (and other non-GOP) consoles are kept.
+
+  Every handle producing Simple Text Out is located and checked: a console is
+  considered video if it has GOP installed on the same handle, or if its device
+  path matches a GOP device's path. A video console is dropped by uninstalling
+  its Simple Text Out protocol; the console splitter removes it from ConOut
+  through its protocol notify, so no console re-installation is needed here.
+
+  If nothing can be identified as a video console the setup is left untouched,
+  so output is never lost entirely. Note: this affects the rest of the boot
+  session if control ever returns to BDS (e.g. failed boot falling back to
+  Setup).
+**/
+STATIC
+EFI_STATUS
+KeepOnlySerialConsole (
+  VOID
+  )
+{
+  EFI_STATUS  Status;
+  EFI_HANDLE  *Handles;
+  UINTN       Count;
+  UINTN       Index;
+
+  Handles = NULL;
+  Count   = 0;
+  Status = gBS->LocateHandleBuffer (
+                  ByProtocol,
+                  &gEfiSimpleTextOutProtocolGuid,
+                  NULL,
+                  &Count,
+                  &Handles
+                  );
+  if (EFI_ERROR (Status) || (Count == 0) || (Handles == NULL)) {
+    // Best effort: leave the console setup alone.
+    return EFI_SUCCESS;
+  }
+
+  for (Index = 0; Index < Count; Index++) {
+    EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL  *TextOut;
+    EFI_DEVICE_PATH_PROTOCOL         *DevicePath;
+
+    Status = gBS->HandleProtocol (Handles[Index], &gEfiSimpleTextOutProtocolGuid, (VOID **)&TextOut);
+    if (EFI_ERROR (Status) || (TextOut == NULL)) {
+      continue;
+    }
+
+    //
+    // A text console installed directly on a GOP device is a video console.
+    //
+    if (!EFI_ERROR (gBS->HandleProtocol (Handles[Index], &gEfiGraphicsOutputProtocolGuid, NULL))) {
+      DEBUG ((DEBUG_INFO, "%a: dropping video text console from ConOut\r\n", __FUNCTION__));
+      gBS->UninstallProtocolInterface (Handles[Index], &gEfiSimpleTextOutProtocolGuid, TextOut);
+      continue;
+    }
+
+    //
+    // Handles without a device path (e.g. the console splitter's own virtual
+    // handle) cannot be identified - keep them.
+    //
+    Status = gBS->HandleProtocol (Handles[Index], &gEfiDevicePathProtocolGuid, (VOID **)&DevicePath);
+    if (EFI_ERROR (Status) || (DevicePath == NULL)) {
+      continue;
+    }
+
+    if (!IsVideoTextConsole (DevicePath)) {
+      continue;
+    }
+
+    DEBUG ((DEBUG_INFO, "%a: dropping video text console from ConOut\r\n", __FUNCTION__));
+    gBS->UninstallProtocolInterface (Handles[Index], &gEfiSimpleTextOutProtocolGuid, TextOut);
+  }
+
+  FreePool (Handles);
+  return EFI_SUCCESS;
+}
+
+/**
   Show the splash screen: clear the display to black and draw the embedded
   logo centered on the screen.
 
@@ -144,6 +318,11 @@ ShowL4TSplashScreen (
     DEBUG ((DEBUG_WARN, "%a: failed to clear screen: %r\r\n", __FUNCTION__, Status));
     return EFI_SUCCESS;
   }
+
+  //
+  // Route further console output to serial only so logs do not trash the splash.
+  //
+  KeepOnlySerialConsole ();
 
   //
   // Locate the HII protocols.

@@ -82,6 +82,7 @@
   # Splash screen support (L4TSplash.c)
   #
   gEfiGraphicsOutputProtocolGuid        ## CONSUMES
+  gEfiSimpleTextOutProtocolGuid         ## CONSUMES
   gEfiHiiDatabaseProtocolGuid           ## CONSUMES
   gEfiHiiImageExProtocolGuid            ## CONSUMES
   gEfiHiiPackageListProtocolGuid        ## PRODUCES
