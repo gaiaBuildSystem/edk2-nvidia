@@ -34,7 +34,7 @@
 // Logo size as a percentage of the screen height, in 10ths of a percent.
 // Matches the firmware's default boot logo scaling (40%).
 //
-#define SPLASH_LOGO_SCREEN_RATIO  400
+#define SPLASH_LOGO_SCREEN_RATIO  1000
 
 STATIC EFI_HII_IMAGE_EX_PROTOCOL  *mHiiImageEx;
 STATIC EFI_HII_HANDLE             mHiiHandle;
