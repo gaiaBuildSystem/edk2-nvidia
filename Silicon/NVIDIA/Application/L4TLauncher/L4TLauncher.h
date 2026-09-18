@@ -33,7 +33,9 @@
 #define BOOT_FW_VARIABLE_NAME  L"BootChainFwCurrent"
 #define BOOT_OS_VARIABLE_NAME  L"BootChainOsCurrent"
 
-#define ROOTFS_BASE_NAME        L"APP"
+// for gaia we will maintain the name of the variable but it will really point
+// to the /boot partition
+#define ROOTFS_BASE_NAME        L"BOOT"
 #define BOOTIMG_BASE_NAME       L"kernel"
 #define BOOTIMG_DTB_BASE_NAME   L"kernel-dtb"
 #define RECOVERY_BASE_NAME      L"recovery"
