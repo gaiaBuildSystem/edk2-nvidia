@@ -19,7 +19,7 @@
 #define GRUB_BOOTCONFIG_CONTENT_FORMAT  "set cbootargs=\"%s\"\r\nset root_partition_number=%u\r\nset bootimg_present=%u\r\nset recovery_present=%u\r\n"
 #define DETACHED_SIG_FILE_EXTENSION     L".sig"
 
-#define EXTLINUX_CONF_PATH  L"boot\\extlinux\\extlinux.conf"
+#define EXTLINUX_CONF_PATH  L"BOOT\\extlinux\\extlinux.conf"
 
 #define BOOTMODE_DIRECT_STRING    L"bootmode=direct"
 #define BOOTMODE_GRUB_STRING      L"bootmode=grub"
