@@ -35,12 +35,11 @@
 
 // for gaia we will maintain the name of the variable but it will really point
 // to the /boot partition
-#define ROOTFS_BASE_NAME        L"BOOT"
+#define ROOTFS_BASE_NAME        L"mbr_1"
 #define BOOTIMG_BASE_NAME       L"kernel"
 #define BOOTIMG_DTB_BASE_NAME   L"kernel-dtb"
 #define RECOVERY_BASE_NAME      L"recovery"
 #define RECOVERY_DTB_BASE_NAME  L"recovery-dtb"
-
 #define EXTLINUX_KEY_TIMEOUT     L"TIMEOUT"
 #define EXTLINUX_KEY_DEFAULT     L"DEFAULT"
 #define EXTLINUX_KEY_MENU_TITLE  L"MENU TITLE"

@@ -302,6 +302,167 @@ LocatePartitionIndex (
 }
 
 /**
+  MBR partition entry structure (16 bytes each, offset 0x1BE from disk start).
+
+**/
+typedef struct {
+  UINT8   Status;             // 0x80 = active/bootable, 0x00 = inactive
+  UINT8   StartingHead;
+  UINT16  StartingSectorCyl;  // CHS encoding of starting LBA
+  UINT8   PartitionType;      // e.g., 0x83 (Linux), 0x07 (NTFS/exFAT)
+  UINT8   EndingHead;
+  UINT16  EndingSectorCyl;    // CHS encoding of ending LBA
+  UINT32  StartingLBA;        // Relative starting LBA from MBR offset
+  UINT32  TotalSectors;       // Total sectors in partition
+} __attribute__((packed)) MBR_PARTITION_ENTRY;
+
+/**
+  Find a partition by its entry index on an MBR disk.
+
+  Reads the first sector (LBA 0) of the parent whole-disk to parse the
+  MBR partition table, then matches against child controller handles whose
+  PartitionNumber corresponds to one of the valid entries in the table.
+
+  @param[in]  ParentDiskHandle      Handle of the whole disk device.
+  @param[in]  DesiredIndex          The desired MBR entry index (1-4).
+  @param[out] FoundPartitionIndex   The matched partition index (1-4 for MBR).
+  @param[out] PartitionHandle       Handle of the matching partition.
+
+  @retval EFI_SUCCESS               Operation completed successfully.
+  @retval EFI_NOT_FOUND             No matching partition found.
+**/
+STATIC
+EFI_STATUS
+EFIAPI
+FindMbrPartitionByIndex (
+  IN  EFI_HANDLE   ParentDiskHandle,
+  IN  UINT32       DesiredIndex,
+  OUT UINT32       *FoundPartitionIndex OPTIONAL,
+  OUT EFI_HANDLE   *PartitionHandle     OPTIONAL
+  )
+{
+  EFI_STATUS           Status;
+  EFI_HANDLE           *ChildHandles = NULL;
+  UINTN                ChildCount    = 0;
+  UINTN                ChildIndex;
+  EFI_BLOCK_IO_PROTOCOL  *BlockIo       = NULL;
+  EFI_DISK_IO_PROTOCOL   *DiskIo        = NULL;
+  UINT8                MbrBuffer[512];
+  CONST MBR_PARTITION_ENTRY *MbrEntries;
+  UINT32               PartNum;
+
+  if (DesiredIndex < 1 || DesiredIndex > 4) {
+    return EFI_INVALID_PARAMETER;
+  }
+
+  // Get children of the disk controller
+  Status = ParseHandleDatabaseForChildControllers (ParentDiskHandle, &ChildCount, &ChildHandles);
+  if (EFI_ERROR (Status) || ChildCount == 0) {
+    DEBUG ((DEBUG_INFO, "%a: No child controllers found for MBR lookup\r\n", __FUNCTION__));
+    return EFI_NOT_FOUND;
+  }
+
+  // Find the disk's BlockIo/DiskIo to read LBA 0 (the MBR itself).
+  Status = gBS->HandleProtocol (
+                  ParentDiskHandle,
+                  &gEfiBlockIoProtocolGuid,
+                  (VOID **)&BlockIo
+                  );
+  if (EFI_ERROR (Status)) {
+    DEBUG ((DEBUG_INFO, "%a: No BlockIo on parent disk\r\n", __FUNCTION__));
+    FreePool (ChildHandles);
+    return EFI_NOT_FOUND;
+  }
+
+  Status = gBS->HandleProtocol (
+                  ParentDiskHandle,
+                  &gEfiDiskIoProtocolGuid,
+                  (VOID **)&DiskIo
+                  );
+  if (EFI_ERROR (Status)) {
+    DEBUG ((DEBUG_INFO, "%a: No DiskIo on parent disk\r\n", __FUNCTION__));
+    FreePool (ChildHandles);
+    return EFI_NOT_FOUND;
+  }
+
+  // Read MBR (first sector, LBA 0) from the disk
+  Status = DiskIo->ReadDisk (
+                    DiskIo,
+                    BlockIo->Media->MediaId,
+                    0,                              // LBA 0 = MBR
+                    sizeof (MbrBuffer),
+                    MbrBuffer
+                    );
+  if (EFI_ERROR (Status)) {
+    DEBUG ((DEBUG_INFO, "%a: Failed to read MBR sector\r\n", __FUNCTION__));
+    FreePool (ChildHandles);
+    return EFI_NOT_FOUND;
+  }
+
+  // Check MBR signature at offset 510-511
+  if (MbrBuffer[510] != 0x55 || MbrBuffer[511] != 0xAA) {
+    DEBUG ((DEBUG_INFO, "%a: Invalid MBR signature\r\n", __FUNCTION__));
+    FreePool (ChildHandles);
+    return EFI_NOT_FOUND;
+  }
+
+  // Parse the 4 partition entries starting at offset 0x1BE (446)
+  MbrEntries = (CONST MBR_PARTITION_ENTRY *)(MbrBuffer + 0x1BE);
+
+  // Verify the desired entry is actually used (has non-zero start LBA or type)
+  if ((MbrEntries[DesiredIndex - 1].StartingLBA == 0) &&
+      (MbrEntries[DesiredIndex   - 1].PartitionType == 0)) {
+    DEBUG ((DEBUG_INFO, "%a: MBR entry %u is not used\r\n", __FUNCTION__, DesiredIndex));
+    FreePool (ChildHandles);
+    return EFI_NOT_FOUND;
+  }
+
+  // Match desired index against child handles by PartitionNumber
+  for (ChildIndex = 0; ChildIndex < ChildCount; ChildIndex++) {
+    EFI_DEVICE_PATH_PROTOCOL *DevPath;
+    HARDDRIVE_DEVICE_PATH      *HdPath;
+
+    Status = gBS->HandleProtocol (
+                    ChildHandles[ChildIndex],
+                    &gEfiDevicePathProtocolGuid,
+                    (VOID **)&DevPath
+                    );
+    if (EFI_ERROR (Status)) {
+      continue;
+    }
+
+    PartNum = 0;
+    while (!IsDevicePathEndType (DevPath)) {
+      if ((DevicePathType (DevPath) == MEDIA_DEVICE_PATH) &&
+          (DevicePathSubType (DevPath) == MEDIA_HARDDRIVE_DP))
+      {
+        HdPath = (HARDDRIVE_DEVICE_PATH *)DevPath;
+        PartNum = HdPath->PartitionNumber;
+        break;
+      }
+      DevPath = NextDevicePathNode (DevPath);
+    }
+
+    if (PartNum == DesiredIndex) {
+      // Found a match!
+      DEBUG ((DEBUG_INFO, "%a: Found MBR partition index %u on handle %p\r\n", __FUNCTION__, PartNum, ChildHandles[ChildIndex]));
+      if (FoundPartitionIndex != NULL) {
+        *FoundPartitionIndex = PartNum;
+      }
+      if (PartitionHandle != NULL) {
+        *PartitionHandle = ChildHandles[ChildIndex];
+      }
+      FreePool (ChildHandles);
+      return EFI_SUCCESS;
+    }
+  }
+
+  DEBUG ((DEBUG_INFO, "%a: MBR partition index %u not found in children\r\n", __FUNCTION__, DesiredIndex));
+  FreePool (ChildHandles);
+  return EFI_NOT_FOUND;
+}
+
+/**
   Find the partition on the same disk as the loaded image
 
   Will fall back to the other bootchain if needed
@@ -356,6 +517,9 @@ FindPartitionInfo (
     return Status;
   }
 
+  Print (L"FindPartitionInfo: device=%p bootChain=%u basename='%s' parentCount=%lu\r\n",
+         DeviceHandle, BootChain, PartitionBasename, ParentCount);
+
   for (ParentIndex = 0; ParentIndex < ParentCount; ParentIndex++) {
     Status = ParseHandleDatabaseForChildControllers (ParentHandles[ParentIndex], &ChildCount, &ChildHandles);
     if (EFI_ERROR (Status)) {
@@ -363,19 +527,27 @@ FindPartitionInfo (
       return Status;
     }
 
+    Print (L"FindPartitionInfo[%u]: parent=%p children=%lu\r\n", ParentIndex, ParentHandles[ParentIndex], ChildCount);
+
     for (ChildIndex = 0; ChildIndex < ChildCount; ChildIndex++) {
       Status = gBS->HandleProtocol (ChildHandles[ChildIndex], &gEfiPartitionInfoProtocolGuid, (VOID **)&PartitionInfo);
       if (EFI_ERROR (Status)) {
+        Print (L"  FindPart[%u,%d]: no PartitionInfo (%r)\r\n", ParentIndex, ChildIndex, Status);
         continue;
       }
 
       // Only GPT partitions are supported
       if (PartitionInfo->Type != PARTITION_TYPE_GPT) {
+        Print (L"  FindPart[%u,%d]: type=%lu (not GPT)\r\n", ParentIndex, ChildIndex, PartitionInfo->Type);
         continue;
       }
 
+      Print (L"  FindPart[%u,%u]: GPT name='%s'\r\n", ParentIndex, ChildIndex,
+             PartitionInfo->Info.Gpt.PartitionName);
+
       // Look for A/B Names
       if (StrCmp (PartitionInfo->Info.Gpt.PartitionName, PartitionBasename) == 0) {
+        Print (L"    -> matched generic name\r\n");
         ASSERT (FoundHandleGeneric == 0);
         FoundHandleGeneric = ChildHandles[ChildIndex];
       } else if ((PartitionBasenameLen + 2) == StrLen (PartitionInfo->Info.Gpt.PartitionName)) {
@@ -421,10 +593,49 @@ FindPartitionInfo (
 
     FreePool (ChildHandles);
   }
+    {
+      Print(L"FindPartitionInfo: FoundHandle=%p FoundGeneric=%p FoundAlt=%p\r\n",
+           FoundHandle, FoundHandleGeneric, FoundHandleAlt);
+      if (FoundHandle != 0) {
+        Print(L"FindPartitionInfo: matched A/B chain=%u\r\n", BootChain);
+      } else if (FoundHandleGeneric != 0) {
+        Print(L"FindPartitionInfo: matched generic name='%s'\r\n", PartitionBasename);
+      }
+    }
+
+  // GPT name matching failed. Try MBR fallback if basename starts with "mbr_".
+  if ((FoundHandle == 0) && (FoundHandleGeneric == 0)) {
+    UINT32  MbrIndex;
+    CONST CHAR16  *MbrSuffix;
+
+    Print (L"MBR fallback invoked \r\n");
+
+    // Check for mbr_X naming convention where X is 1-4
+    if (StrnCmp (PartitionBasename, L"mbr_", 4) == 0) {
+      MbrSuffix = PartitionBasename + 4;
+      if (*MbrSuffix >= L'1' && *MbrSuffix <= L'4' && *(MbrSuffix + 1) == L'\0') {
+        MbrIndex = *MbrSuffix - L'0';
+
+        // ParentHandles[ParentIndex] is already the raw disk (its children are
+        // the MBR partition handles enumerated above), so look up the MBR
+        // partition directly on it instead of searching its children for one.
+        for (ParentIndex = 0; ParentIndex < ParentCount; ParentIndex++) {
+          Status = FindMbrPartitionByIndex (
+                     ParentHandles[ParentIndex], MbrIndex, &FoundIndex, &FoundHandle
+                     );
+          Print (L"MBR fallback[%u]: FindMbrPartitionByIndex(index=%u) -> %r\r\n", ParentIndex, MbrIndex, Status);
+          if (!EFI_ERROR (Status)) {
+            DEBUG ((DEBUG_INFO, "%a: Found partition via MBR index %u\r\n", __FUNCTION__, MbrIndex));
+            break;  // Break ParentCount loop once found
+          }
+        }
+      }
+    }
+  }
 
   FreePool (ParentHandles);
 
-  if ((FoundHandle == 0) && (FoundHandleGeneric == 0) && (FoundHandleAlt == 0)) {
+  if ((FoundHandle == 0) && (FoundHandleGeneric == 0)) {
     return EFI_NOT_FOUND;
   } else if (FoundHandle == 0) {
     if (FoundHandleGeneric != 0) {
